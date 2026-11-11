@@ -69,6 +69,7 @@ def new_stack(dest: Path, weights: Optional[Path], name: str = "", task: str = "
             shutil.copy2(p, t)
         cfg["preset"] = str(preset)
     (dest / "stack.json").write_text(json.dumps(cfg, indent=2) + "\n")
+    _render_readme(dest, cfg, preset)
     orig = dest / "weights" / "original"
     orig.mkdir(parents=True, exist_ok=True)
     if weights:
@@ -80,6 +81,19 @@ def new_stack(dest: Path, weights: Optional[Path], name: str = "", task: str = "
         from .decode import decode as run_decode
         run_decode(st)
     return dest
+
+
+def _render_readme(dest: Path, cfg: dict, preset) -> None:
+    readme = dest / "README.md"
+    if not readme.exists() or "__NAME__" not in readme.read_text():
+        return
+    task = cfg.get("task") or "(task not set: put one sentence about what the model does and what to change in stack.json)"
+    short = (cfg.get("task") or "what to change").replace('"', "'")
+    pname = Path(preset).name if preset else ""
+    txt = (readme.read_text().replace("__NAME__", cfg.get("name") or dest.name).replace("__TASK_SHORT__", short)
+           .replace("__TASK__", task).replace("__DIRNAME__", dest.name)
+           .replace("__PRESET_FLAG__", f"--preset {pname} " if pname else ""))
+    readme.write_text(txt)
 
 
 def add_weights(dest: Path, weights: Path, link: bool = False) -> None:

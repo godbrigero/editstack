@@ -19,17 +19,24 @@ my-stack/
   docs/                LESSONS.md (evidence), EDIT_COOKBOOK.md, HARNESS_AUDIT.md
 ```
 
-## Install
+## Install (one command)
 
 ```bash
-# CLI anywhere (isolated):
-uv tool install git+https://github.com/godbrigero/editstack        # or: pipx install git+https://github.com/godbrigero/editstack
-# or into the environment that runs your model/sim:
-uv pip install --python /path/to/venv/bin/python git+https://github.com/godbrigero/editstack
+curl -LsSf https://raw.githubusercontent.com/godbrigero/editstack/main/install.sh | sh
 ```
-Only dependency: numpy. torch / onnx are needed only for .pt/.bin/TorchScript or .onnx checkpoints.
-If the CLI and your sim live in different environments, set `"python"` in stack.json (or `--python` on `new`):
-model-loading commands re-run themselves under that interpreter automatically.
+This installs [uv](https://astral.sh/uv) if it's missing, then the `editstack` CLI. To install and create a stack in
+one go:
+```bash
+curl -LsSf https://raw.githubusercontent.com/godbrigero/editstack/main/install.sh | sh -s -- \
+    ~/stacks/my-model --weights /path/to/model --task "what to change" [--preset smolvla-so101] [--python /venv/bin/python]
+```
+Alternatives: `uv tool install git+https://github.com/godbrigero/editstack`, or `pipx install git+...`. To put it
+into the environment that runs your sim: `uv pip install --python /path/to/venv/bin/python git+https://github.com/godbrigero/editstack`.
+Pin a version with `EDITSTACK_REF=<tag|commit>`.
+
+The only dependency is numpy. torch and onnx are needed only for .pt/.bin/TorchScript or .onnx checkpoints. If the CLI
+and your sim live in different environments, set `"python"` in stack.json (or pass `--python` to `new`). Commands that
+load the model then re-run themselves under that interpreter automatically.
 
 ## Use
 
