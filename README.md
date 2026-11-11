@@ -23,9 +23,9 @@ my-stack/
 
 ```bash
 # CLI anywhere (isolated):
-uv tool install git+https://github.com/<you>/editstack        # or: pipx install git+https://github.com/<you>/editstack
+uv tool install git+https://github.com/godbrigero/editstack        # or: pipx install git+https://github.com/godbrigero/editstack
 # or into the environment that runs your model/sim:
-uv pip install --python /path/to/venv/bin/python git+https://github.com/<you>/editstack
+uv pip install --python /path/to/venv/bin/python git+https://github.com/godbrigero/editstack
 ```
 Only dependency: numpy. torch / onnx are needed only for .pt/.bin/TorchScript or .onnx checkpoints.
 If the CLI and your sim live in different environments, set `"python"` in stack.json (or `--python` on `new`):
