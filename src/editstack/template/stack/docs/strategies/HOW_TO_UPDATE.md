@@ -35,5 +35,6 @@ Write the reason for every status change as an evidence bullet.
 - In INDEX.md, mark the row `superseded by S<NN>` in the "pick it when" column.
 
 ## Corrections to other docs
-If your evidence contradicts a number in another doc (LESSONS.md, APPROACH_PLAYBOOK.md, …), add an item to
-"Corrections to other docs" in INDEX.md with the doc, the claim, the correct value and the evidence path.
+If your evidence contradicts a number in another doc, fix it at the source: LESSONS.md is the single source of
+numbers. Mark the change **[corrected]** with the evidence path, then fix every doc that repeats the number
+(`grep -rn "<old number>" docs/ AGENTS.md`). Record it with `editstack learn ... --outcome info`.

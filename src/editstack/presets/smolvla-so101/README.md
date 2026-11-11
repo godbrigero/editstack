@@ -23,4 +23,4 @@ The camera maps are not shipped (59 MB each). Copy them in from the original pro
     cp <old project>/agents/camfix/data/maps2.npz  edits/cf2/data/
     cp <old project>/agents/camfix/data/maps3.npz  edits/cf3p25/data/
 
-Set `SO101_REPO` if the sim code isn't at ~/Documents/smolvla-weight-edit-6000/repo.
+Set `"sim_repo"` in stack.json (or env `SO101_REPO`) to your copy of the airtruck sim code.

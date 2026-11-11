@@ -9,7 +9,7 @@ import numpy as np
 
 from editstack import ops, fit  # noqa: F401
 
-PARENT = {parent}
+PARENT = {parent}          # None = builds directly on the original model
 OWNER = "{owner}"
 
 

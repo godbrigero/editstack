@@ -40,7 +40,19 @@ def edit_dir(stack, name: str) -> Path:
     return stack.edits_dir / name
 
 
+def fresh_bytecode() -> None:
+    """Never reuse compiled bytecode for edits or env helpers. Python validates .pyc files by mtime + size, so a
+    helper rewritten within the same second at the same size would silently run OLD code while the chain hash says
+    the weights are new. A per-process private cache directory makes that impossible."""
+    import sys
+    import tempfile
+    if not getattr(sys, "_editstack_pyc", False):
+        sys.pycache_prefix = tempfile.mkdtemp(prefix="editstack-pyc-")
+        sys._editstack_pyc = True
+
+
 def load_edit(stack, name: str):
+    fresh_bytecode()
     path = edit_dir(stack, name) / "edit.py"
     import sys
     env = str(stack.root / "env")

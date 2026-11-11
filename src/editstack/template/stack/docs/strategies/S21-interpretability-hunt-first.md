@@ -23,7 +23,7 @@ n/a.
 ## Expected effect & cost
 - Codex line (step-2000, strict 10-case 18 s contact test): ~14 h of norm gains, attention head balance, RoPE pairs,
   Q/K directions, connector contrast, block restores; 148 runs / 1,402 rollouts; plateau at 5/10 for ~13.7 h.
-- Claude line (step-6000, 20-episode held ≥ 1 s test): interface route (S01 + S02 + S08 + S09) → 19/20 in 74 min.
+- Claude line (step-6000, 20-episode held ≥ 1 s test): interface route (S01 + S02 + S08 + S09) → 17/20 in 47 min (pad0), 19/20 in 74 min (deep8, one seed).
   Different checkpoints and tests: not a controlled comparison.
 - Old project: head-output patching found the servo signal distributed (each head ≤ 0.16); latent's head maps were
   correct but its edit gave no pick gain (S16).

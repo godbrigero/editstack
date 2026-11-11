@@ -15,6 +15,9 @@ procedure itself was never run in either project; only forward stage-by-stage sc
 - A paired eval (same placements and seeds) and a screen suite cheap enough to run n+1 variants.
 
 ## Procedure
+0. In editstack: `editstack ablate <variant> --suite <target> --seeds 0,1,2` builds and evaluates every
+   chain-minus-one-link variant (`<v>~minus~<link>`) paired against the full chain; `editstack promote` reports links
+   whose removal never hurt.
 1. **Forward stages** (cheap, always): score prefixes m1, m2, … mn on the qualify suites (paired, ≥2 seeds).
 2. **Leave-one-out** for links whose forward marginal is ≤ 1 SE: build chain-minus-link-i (edit.py with that call
    removed, everything else identical, readouts unchanged) and score paired against the full chain.

@@ -13,6 +13,8 @@ Last updated: 2026-11-10
   `results.jsonl` line (max_lift, held_1s, yaw, ...). Without these, rescoring means re-running the sim.
 
 ## Procedure
+0. In editstack: change classify/metrics in env/adapter.py `rescore()`, bump `metric_version` in stack.json, run
+   `editstack rescore` (rewrites results from stored trajectories, keeps a backup; no sim). Steps below are the math.
 1. Write the new metric as a pure function of stored arrays (`OLD/rescore.py`: pick = max_lift ≥ 2 cm;
    `OLD/bench.py`: staged labels).
 2. Staged metric (bench.py): find the first close after opening; within 0.5 s take the closest tip-to-cube approach.

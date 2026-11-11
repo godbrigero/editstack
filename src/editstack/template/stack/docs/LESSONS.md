@@ -1,6 +1,6 @@
 # Lessons: the evidence behind the guides (single source of numbers)
 
-Source: the SmolVLA SO-101 yellow-cube project (Nov 2026): ~50 agent sessions, ~4,300 sim episodes, an
+Source: the SmolVLA SO-101 yellow-cube project (Nov 2026): ~85 agent sessions (editing + hybrid projects), ~4,300 sim episodes, an
 independent evidence audit, and three evidence-based guide writers. Other guides cite this file; when a number
 changes, change it HERE. Corrections from the audit are marked **[corrected]**.
 
@@ -32,7 +32,7 @@ or a gated circuit). None came from searching scales by trial and error.
   folded upstream recovered 58/60. The real cost was the late discovery plus ~4 h of camfix work. A stale copy of the
   sim code also went unnoticed. Lessons: ask the user for one real frame per camera at the start, and fix input
   shifts by folding a map UPSTREAM of existing edits.
-- **Structure before interpretability. [confounded, kept as judgement]** The structural route reached 19/20 in 74 min;
+- **Structure before interpretability. [confounded, kept as judgement]** The structural route reached 17/20 in 47 min (pad0) and 19/20 in 74 min (deep8, one seed);
   a parallel head/neuron/RoPE hunt sat at 5/10 for ~14 h. The two used different checkpoints (step 6000 vs 2000) and
   tests (lenient 20-episode vs strict 10-case), and the slow line had also found pad-zero (0/5 on its test). pad0
   itself is a real win.

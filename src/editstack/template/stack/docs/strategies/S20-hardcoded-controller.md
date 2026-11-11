@@ -5,7 +5,7 @@ Last updated: 2026-11-10
 
 ## When to use
 Never. It replaces the model instead of editing its behaviour, and it does not generalise past the cases it was built
-for. The user rejected it ("you just encoded a controller").
+for. The user rejected it as a hard-coded controller rather than an edit.
 
 ## Preconditions & confirming probes
 Red flags that you are drifting into it: zeroing vision/language paths, routing on case identity or fixed placements,

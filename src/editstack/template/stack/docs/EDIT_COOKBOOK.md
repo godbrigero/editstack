@@ -19,11 +19,14 @@ behaviour iff those channels carry no information (check the loss mask and data 
 
 **Scale an axis by k (command gain without perception gain).** Output row `*k` (and bias), input column `/k`, and
 fix the bias so a chosen centre C is a fixed point. Holding still is unchanged; every image-driven move is k x.
-`ops.rescale_channel` is the function-preserving pair: run it FIRST and confirm outputs are unchanged, then remove
+`ops.rescale_channel` is the function-preserving pair: run it FIRST and confirm ONE forward pass (one denoising step,
+not the full sampler: on flow-matching heads the channel is fed back, so the full loop is not invariant) is unchanged, then remove
 the compensating half on the side you want to change.
 
 **Fold a linear map.** If the inputs a layer sees changed (new cameras, new normalisation), fit `x_old ~= M x_new + c`
-on PAIRED samples (`fit.paired_map`), then `ops.fold_input_map(W, w, M, b, c)`. Do it at the layer(s) where the
+on PAIRED samples (`M, c = fit.paired_map(X_new, X_old)`; it shrinks toward the identity), then
+`ops.fold_input_map(W, w, M, b, c)`. If the reader has no bias (e.g. attention o_proj), fit with
+`fit.paired_map(..., intercept=False)` and call `ops.fold_input_map(W, w, M)`. Do it at the layer(s) where the
 mismatch is smallest and the map is most linear; check per-layer R^2 on held-out scenes AND placements.
 
 ## B. Closed-form fits

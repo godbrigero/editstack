@@ -123,6 +123,14 @@ def sync(stack, dry_run: bool = False) -> List[str]:
             continue
         locally_edited = installed.get(rel) is not None and installed[rel] != _h(loc)
         unknown = rel not in installed
+        if (locally_edited or unknown) and rel.startswith("docs/strategies/S"):
+            merged = merge_strategy(up.read_text(), loc.read_text())
+            if merged is not None:
+                report.append(f"merged   {rel} (upstream text + this stack's evidence-log lines)")
+                if not dry_run:
+                    loc.write_text(merged)
+                    installed[rel] = _h(loc)
+                continue
         if locally_edited or unknown:
             report.append(f"CONFLICT {rel}: edited locally -> upstream written to {rel}.upstream (merge, keep the evidence logs)")
             if not dry_run:
@@ -164,3 +172,32 @@ def contribute(stack, out: Optional[Path] = None) -> Path:
         header += "".join("# " + l for l in journal.read_text().splitlines(True))
     out.write_text(header + "\n" + "".join(chunks))
     return out
+
+
+def _evidence(text: str):
+    m = re.search(r"^#+\s*Evidence log.*$", text, flags=re.M | re.I)
+    if not m:
+        return None, None
+    nxt = re.search(r"^#+\s", text[m.end():], flags=re.M)
+    end = m.end() + nxt.start() if nxt else len(text)
+    return (m.end(), end), [l for l in text[m.end():end].splitlines() if l.strip().startswith("- ")]
+
+
+def _status(text: str):
+    m = re.search(r"^\W*Status:.*$", text, flags=re.M)
+    return m.group(0).strip() if m else None
+
+
+def merge_strategy(upstream: str, local: str):
+    """Upstream strategy text + evidence-log bullets only the local copy has. Returns None (-> conflict file) when
+    the local copy changed anything else that matters (its Status line)."""
+    if _status(local) != _status(upstream):
+        return None
+    span, up_lines = _evidence(upstream)
+    _, loc_lines = _evidence(local)
+    if span is None or loc_lines is None:
+        return None
+    extra = [l for l in loc_lines if l not in up_lines]
+    a, b = span
+    body = upstream[a:b].rstrip("\n")
+    return upstream[:a] + body + ("\n" + "\n".join(extra) if extra else "") + "\n\n" + upstream[b:].lstrip("\n")

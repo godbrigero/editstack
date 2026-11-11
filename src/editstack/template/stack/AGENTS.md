@@ -1,7 +1,7 @@
 # Agent guide: editing this model's weights
 
 You are editing the weights of ONE model (this stack) by hand: no gradient training and no new data, unless the user
-explicitly says otherwise. This guide and `docs/` distil ~5 days and ~50 agent sessions of hand-editing a SmolVLA
+explicitly says otherwise. This guide and `docs/` distil ~5 days and ~85 agent sessions of hand-editing a SmolVLA
 robot policy, corrected by an independent evidence audit. Every rule has evidence in `docs/LESSONS.md`. The
 guidance is fast because it removes guesswork: every edit is derived, every claim is measured, and every number is
 comparable. It is a living knowledge base: Phase 6 is how you improve it.
@@ -14,10 +14,17 @@ comparable. It is a living knowledge base: Phase 6 is how you improve it.
 | first time in this stack | this file, then `docs/HARNESS_AUDIT.md` |
 | understanding the model / locating a failure | `docs/ANALYSIS_GUIDE.md` |
 | only numbers + a description (no code, anonymous tensors) | `docs/NUMBERS_ONLY_EDITING.md` |
-| choosing what to do about a measured symptom | `docs/strategies/INDEX.md` (30 strategies; quick table: `docs/APPROACH_PLAYBOOK.md`) |
+| choosing what to do about a measured symptom | `docs/strategies/INDEX.md` (30 strategies + selection flow) |
 | executing an edit | the strategy file + `docs/EDIT_COOKBOOK.md` |
-| you are the lead, or you are about to start agents | `docs/AGENT_FLEET.md` (one-page summary: `docs/ORCHESTRATION.md`) |
+| you are the lead, or you are about to start agents | `docs/AGENT_FLEET.md` (its first table is the quick reference; §3 below is the summary) |
 | a number or rule seems wrong | `docs/LESSONS.md` (single source of numbers), then Phase 6 |
+
+**Scale the process to the model.** The full process below is for slow, expensive evals (seconds to minutes per
+episode, real hardware, shared RAM). If an episode takes about a second and there is no hardware or camera: skip the
+real-frame and RAM steps, run evals in the foreground (no `--detach`/`wait`), and fill ARCHITECTURE.md only with the
+facts your edit relies on (a few lines). A solo agent can skip AGENT_FLEET.md, and NUMBERS_ONLY_EDITING.md is only for
+models without code. The rules in section 0 and the evaluation ladder still apply. A blind trial on a toy stack fixed the
+model in 16 tool calls by going straight from SCAN.md to S01 to `qualify` to `promote`.
 
 ---------------------------------------------------------------------------------------------------------------
 
@@ -78,8 +85,9 @@ a ~0.5-2 B parameter model and a ~30-60 s sim episode.
 - Fix the suites: `screen` (smoke only), `id`, `ood` (the target), and `heldout` (never used for choosing).
 - **Start the baselines detached now** (`original` on id with 2 seeds and ood with 3 seeds, `--detach`). Don't wait
   for them; go to Phase 1.
-- **Gate (before the first EDIT is evaluated):** the adapter is deterministic (same seed and episode give the same
-  result); the sim matches deployment on the checked items; baselines are on the board.
+- **Gate (before the first EDIT is evaluated):** the adapter is deterministic (rerun one episode with `--fresh` and
+  compare results.jsonl: identical); the sim matches deployment on the checked items; baselines are on the board.
+  Rule thresholds count episodes ACROSS complete seeds (2 seeds x 20 episodes = 40 >= min_episodes 30).
 
 ### Phase 1: Structure first (lead alone, <= 1 h, no sub-agents)
 - Run `editstack decode`, then read SCAN.md. Read the model, training and inference code, in the order given in
@@ -102,9 +110,11 @@ a ~0.5-2 B parameter model and a ~30-60 s sim episode.
   works: **exact algebra > closed-form fit > gated circuit**. Read the "failed" strategies (S17-S24) before trying
   anything that resembles them.
 - Each edit.py docstring states: hypothesis, evidence path, expected effect (a number), and an exactness argument.
-- `editstack apply <v>` must show only the intended tensors, at the rank you expect, with your claims.
+- `editstack apply <v>` must show only the intended tensors, at the rank you expect, with your claims. Reserve spare
+  units the moment you choose them (`editstack claims reserve`), so a parallel agent can't take them.
 
 ### Phase 4: Evaluation ladder (stop at the first rung that fails)
+`editstack qualify <v>` runs rungs b-d in order and stops at the first failure. The table says what each rung means.
 | rung | what | pass criterion |
 |---|---|---|
 | a | `editstack apply` diff + offline probe on saved observations | the expected tensors and rank; the target output moves by the predicted amount |
@@ -169,16 +179,22 @@ editstack decode | verify                          inventory + scan | full integ
 editstack edit new <v> --parent <p> --owner <me>   then: editstack apply <v>   (diff, rank, claims; registers nothing)
 editstack eval <v> --suite <s> --seeds 0,1,2 --jobs 2 [--episodes 0-5] [--detach]
 editstack wait <v> --suite <s>                     blocks until that job ends; prints per-seed results
+editstack qualify <v>                              ladder: target seed 0 -> paired early stop -> qualify seeds -> held-out
 editstack board | ablate <v> --suite <s> | promote [--dry-run]
 editstack rescore [<v>]                            recompute metrics from stored trajectories after metric_version++
 editstack export <v>                               weights/variants/<v>, original format, verified bit-exact
 editstack agent new <name> --stage <s> --target "<numbers>"
 editstack learn "<text>" --outcome win|loss|... --evidence <path> [--strategy Sxx]
 editstack docs sync | contribute | index           evolve the knowledge base
-editstack claims | slots | run probes/x.py
+editstack claims [reserve <v> <tensor> <axis> <idx>]   list / reserve units the moment you pick them
+editstack slots | run probes/x.py
 ```
-Python: `from editstack import Stack, ops, fit`. Then `st = Stack.find()`; `a = st.weights("v")`; `pol = st.policy("v")`;
-`st.adapter().capture(pol, obs, names)`.
+Python: `from editstack import Stack, ops, fit`; `st = Stack.find()`.
+- `a = st.weights("v")` returns an Applied object: `a.tensors` (dict name -> array, the full weights), `a.changed`
+  (names), `a.stats` (per-tensor diff stats) and `a.chain`.
+- `pol = st.policy("v")` takes a RAM slot and builds the runnable model through the adapter.
+- `st.adapter().capture(pol, obs, names)` records activations, if the adapter has it.
+In edit.py, `PARENT = None` means the variant builds directly on the original model.
 
 ## 5. Anti-patterns (each cost hours before; evidence in LESSONS.md and strategies S17-S24)
 

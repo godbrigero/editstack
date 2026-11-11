@@ -166,7 +166,9 @@ def test_reviewer_regressions(stack):
     # 2. partial seeds never count
     cli("eval", "pz", "--suite", "ood", "--seeds", "1", "--episodes", "0-3", cwd=stack)
     board = cli("board", cwd=stack).stdout
-    assert "12/12" in board and "1 seeds, 1 partial" in board, board
+    assert "1 seeds, 1 partial" in board, board
+    # the rerun really used ZERO_FROM = 3 (no stale bytecode): channel 2 still carries noise, so not every episode passes
+    assert "success 12/12" not in board.split("**pz**")[1].split("\n")[0], board
     # 3. a corrupt (truncated) results line is skipped, not fatal
     with open(stack / "runs" / "pz" / "ood" / "s0" / "results.jsonl", "a") as f:
         f.write('{"episode": 99, "metr')
@@ -201,3 +203,42 @@ def test_reviewer_regressions(stack):
     w.write_text(w.read_text() + " ")
     r = cli("eval", "pz", "--suite", "screen", "--seeds", "0", cwd=stack, check=False)
     assert r.returncode != 0 and "ORIGINAL WEIGHTS CHANGED" in (r.stdout + r.stderr)
+
+
+def test_qualify_ladder(stack):
+    cli("edit", "new", "q0", cwd=stack)
+    (stack / "edits" / "q0" / "edit.py").write_text(
+        "from editstack import ops\nPARENT=None\ndef apply(W, ctx):\n    ops.zero_cols(W, 'enc.weight', slice(2, None))\n")
+    out = cli("qualify", "q0", cwd=stack).stdout
+    assert "rung c passed" in out and "rung d" in out
+    assert "weights/best -> q0" in cli("promote", cwd=stack).stdout
+    # a harmful edit stops at the paired early-stop rung
+    cli("edit", "new", "bad", "--parent", "q0", cwd=stack)
+    (stack / "edits" / "bad" / "edit.py").write_text("PARENT='q0'\ndef apply(W, ctx):\n    W['head.bias'][:] += 1.0\n")
+    r = cli("qualify", "bad", cwd=stack, check=False)
+    assert r.returncode != 0 and "paired early stop" in (r.stdout + r.stderr)
+
+
+def test_audit2_regressions(stack):
+    # adding a probe-only helper to the adapter does not invalidate runs
+    cli("edit", "new", "z", cwd=stack)
+    (stack / "edits" / "z" / "edit.py").write_text("PARENT=None\ndef apply(W, ctx):\n    W['head.bias'][0] += 0.0\n    W['head.bias'][1] += 1e-3\n")
+    cli("eval", "z", "--suite", "screen", "--seeds", "0", cwd=stack)
+    ad = stack / "env" / "adapter.py"
+    ad.write_text(ad.read_text() + '\n\ndef capture(policy, obs, names):\n    """probe helper"""\n    return {}\n')
+    assert "stale" not in cli("board", cwd=stack).stdout.split("**z**")[1].split("\n")[0]
+    # but changing run_episode does
+    ad.write_text(ad.read_text().replace("err < 0.08}", "err < 0.0801}"))
+    assert "stale" in cli("board", cwd=stack).stdout.split("**z**")[1].split("\n")[0]
+    # early reservation blocks a second variant from taking the same units
+    cli("edit", "new", "z2", cwd=stack)
+    cli("claims", "reserve", "z", "head.weight", "1", "7,8", "--purpose", "test", cwd=stack)
+    (stack / "edits" / "z2" / "edit.py").write_text("PARENT=None\ndef apply(W, ctx):\n    W['head.weight'][:, 7] += 1\n")
+    r = cli("apply", "z2", cwd=stack, check=False)
+    assert r.returncode != 0 and "claimed by z" in (r.stdout + r.stderr)
+    # docs sync merges a strategy's local evidence lines instead of conflicting
+    sdir = stack / "docs" / "strategies"
+    f = next(sdir.glob("S01-*.md"))
+    cli("learn", "unit-test line", "--strategy", "S01", "--outcome", "info", cwd=stack)
+    out = cli("docs", "sync", cwd=stack).stdout
+    assert "CONFLICT" not in out and "unit-test line" in f.read_text()

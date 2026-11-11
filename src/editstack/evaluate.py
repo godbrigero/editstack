@@ -41,9 +41,33 @@ def suite_hash(eps: Sequence[dict]) -> str:
     return hashlib.sha256(json.dumps(list(eps), sort_keys=True).encode()).hexdigest()[:12]
 
 
+PROBE_ONLY = {"capture", "load_obs", "rescore"}     # adding/changing these never changes episode results
+
+
 def adapter_hash(stack) -> str:
+    """Fingerprint of the parts of env/adapter.py that can change episode results. Probe-only helpers (capture,
+    load_obs, rescore), comments and docstrings are excluded, so adding a probe helper does not invalidate runs."""
+    import ast
     p = stack.root / "env" / "adapter.py"
-    return hashlib.sha256(p.read_bytes()).hexdigest()[:12] if p.exists() else "none"
+    if not p.exists():
+        return "none"
+    src = p.read_text()
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return hashlib.sha256(src.encode()).hexdigest()[:12]
+    keep = []
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in PROBE_ONLY:
+            continue
+        if isinstance(node, ast.Expr) and isinstance(getattr(node, "value", None), ast.Constant) and isinstance(node.value.value, str):
+            continue    # module docstring
+        for sub in ast.walk(node):    # strip docstrings inside functions/classes
+            if isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and sub.body and \
+                    isinstance(sub.body[0], ast.Expr) and isinstance(getattr(sub.body[0], "value", None), ast.Constant):
+                sub.body = sub.body[1:] or [ast.Pass()]
+        keep.append(ast.dump(node, annotate_fields=False))
+    return hashlib.sha256("\n".join(keep).encode()).hexdigest()[:12]
 
 
 def run_dir(stack, variant: str, suite: str, seed: int) -> Path:

@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 # commands that load the model / sim and must run under the stack's python (stack.json "python")
-RUNTIME_CMDS = {"eval", "export", "promote", "apply", "decode", "verify", "run", "rescore", "ablate"}
+RUNTIME_CMDS = {"eval", "export", "promote", "apply", "decode", "verify", "run", "rescore", "ablate", "qualify"}
 
 
 def _stack():
@@ -73,9 +73,9 @@ def main(argv=None) -> None:
 
     a = sub.add_parser("agent", help="agent scaffolding")
     ags = a.add_subparsers(dest="sub", required=True)
-    b = ags.add_parser("new", help="create agents/<name>/BRIEF.md + REPORT.md for a stage owner")
+    b = ags.add_parser("new", help="create agents/<name>/BRIEF.md + REPORT.md for an agent that owns one measurable quantity")
     b.add_argument("name")
-    b.add_argument("--stage", required=True, help="the one benchmark stage this agent owns, e.g. 'reach'")
+    b.add_argument("--stage", required=True, help="the one measurable quantity this agent owns: a stage (e.g. reach) or a mechanism")
     b.add_argument("--target", required=True, help="numeric target, e.g. 'ood reach >= 34/36 with id reach >= 90%%'")
     b.add_argument("--suites", default="screen,ood,id")
     b.add_argument("--parent", default="original", help="variant to build on")
@@ -105,6 +105,12 @@ def main(argv=None) -> None:
     a.add_argument("--seeds", help="only report these seeds")
     a.add_argument("--timeout", type=float, default=7200)
 
+    a = sub.add_parser("qualify", help="run the evaluation ladder for a variant: target seed 0 -> paired early stop -> "
+                                       "remaining qualification seeds -> held-out; stops at the first failed rung")
+    a.add_argument("variant")
+    a.add_argument("--jobs", type=int, default=1)
+    a.add_argument("--no-heldout", action="store_true", help="stop after the selection suites")
+
     a = sub.add_parser("rescore", help="recompute metrics from stored artifacts after a metric_version change (no sim)")
     a.add_argument("variant", nargs="?")
 
@@ -122,7 +128,15 @@ def main(argv=None) -> None:
     a.add_argument("--variant")
 
     sub.add_parser("slots", help="machine-wide RAM reservations")
-    sub.add_parser("claims", help="list claimed neurons/channels")
+    a = sub.add_parser("claims", help="list claimed units; `claims reserve` to claim them while designing (before any eval)")
+    cs = a.add_subparsers(dest="sub")
+    b = cs.add_parser("reserve", help="reserve units for a variant now (prevents two agents picking the same spare units)")
+    b.add_argument("variant")
+    b.add_argument("tensor")
+    b.add_argument("axis", type=int)
+    b.add_argument("indices", help="comma-separated, e.g. 779,1893")
+    b.add_argument("--purpose", default="")
+    b.add_argument("--owner", default="")
     sub.add_parser("guide", help="print the path of the agent guide (AGENTS.md)")
     sub.add_parser("presets", help="list bundled model-family presets")
 
@@ -231,6 +245,8 @@ def _dispatch(args, argv) -> None:
         print("\n".join(out))
         if any("NOT COMPLETE" in l for l in out):
             raise SystemExit(1)
+    elif cmd == "qualify":
+        _qualify(st, args.variant, args.jobs, not args.no_heldout)
     elif cmd == "rescore":
         from .evaluate import rescore
         print("\n".join(rescore(st, args.variant)))
@@ -261,6 +277,14 @@ def _dispatch(args, argv) -> None:
     elif cmd == "slots":
         from .slots import status
         print(status(st))
+    elif cmd == "claims" and getattr(args, "sub", None) == "reserve":
+        from .claims import make, register
+        from .variant import chain_of, variant_exists
+        idx = [int(x) for x in args.indices.split(",") if x != ""]
+        if not variant_exists(st, args.variant):
+            raise SystemExit(f"create the variant first: editstack edit new {args.variant}")
+        register(st, [make(args.tensor, args.axis, idx, args.variant, args.owner, args.purpose)], chain_of(st, args.variant))
+        print(f"reserved {args.tensor} axis {args.axis} {idx} for {args.variant}")
     elif cmd == "claims":
         from .claims import load
         for c in load(st):
@@ -302,6 +326,43 @@ def _running(st):
             continue
         out.append((d.relative_to(st.root), len(done_episodes(d)), len(meta.get("episodes_planned", [])), is_locked(d)))
     return out
+
+
+def _qualify(st, variant: str, jobs: int, heldout: bool) -> None:
+    """Rungs b-d of the evaluation ladder (AGENTS.md Phase 4) in one command."""
+    from .evaluate import evaluate
+    from .board import summarize, write
+    q = st.cfg["qualify"]
+    target = q["rank"][0][0]
+    rules = {r["suite"]: r for r in q["rules"]}
+
+    def row():
+        return next((r for r in summarize(st) if r["variant"] == variant), None)
+
+    print(f"[qualify] rung b: {variant} on target suite '{target}', seed 0")
+    evaluate(st, variant, target, [0], jobs=jobs)
+    r = row()
+    vp = (r or {}).get("vs_parent", {}).get(target)
+    if vp and vp["losses"] > vp["wins"]:
+        write(st)
+        raise SystemExit(f"[qualify] STOP (paired early stop): vs parent on {target} seed 0: +{vp['wins']}/-{vp['losses']}. "
+                         f"Record it: editstack learn ... --outcome loss")
+    print(f"[qualify] rung b passed (vs parent: {vp or 'no parent runs to compare'})")
+    for suite, rule in rules.items():
+        seeds = list(range(max(1, rule.get("min_seeds", 1))))
+        print(f"[qualify] rung c: {suite} seeds {seeds}")
+        evaluate(st, variant, suite, seeds, jobs=jobs)
+    r = row()
+    if not r["qualified"]:
+        write(st)
+        raise SystemExit(f"[qualify] NOT QUALIFIED: {', '.join(r['why'])}")
+    print("[qualify] rung c passed: qualified")
+    held = [n for n, s in st.suites().items() if s.get("role") == "heldout"]
+    if heldout and held:
+        print(f"[qualify] rung d: held-out suite '{held[0]}', seed 0")
+        evaluate(st, variant, held[0], [0], jobs=jobs)
+    print(write(st))
+    print(f"[qualify] done. Next: editstack ablate {variant} --suite {target} (multi-link chains), then editstack promote --dry-run")
 
 
 def _status(st) -> None:

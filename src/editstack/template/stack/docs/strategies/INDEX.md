@@ -1,18 +1,21 @@
 # Strategy library: index and selection guide
 
-Use this after ANALYSIS_GUIDE.md has given you a measured symptom. It supersedes the symptom table in
-APPROACH_PLAYBOOK.md (that table is the short version; the files here have the full procedure, math, numbers and
-evidence). Recipes for the primitive ops are in EDIT_COOKBOOK.md; the evidence narrative is in LESSONS.md; how to
+Use this after ANALYSIS_GUIDE.md has given you a measured symptom. Each strategy file has the full procedure, math,
+numbers and evidence. Recipes for the primitive ops are in EDIT_COOKBOOK.md; the evidence narrative is in LESSONS.md; how to
 edit without a sim is in NUMBERS_ONLY_EDITING.md; how to split work across agents is in AGENT_FLEET.md.
-Update a file after every run that touches it: HOW_TO_UPDATE.md.
+Update a file after every run that touches it: HOW_TO_UPDATE.md (`editstack learn --strategy Sxx`).
+
+**Where the code is.** `OLD/...` references are provenance. In a stack, use `editstack.ops` / `editstack.fit`; the
+SmolVLA preset ships the exact flow-matching algebra as `env/smolvla_algebra.py` (pad_zero, translate_actions,
+scale_axis) and the original circuit/camera functions as `env/legacy/` (gpg, grs, cf; run via `env/legacy_bridge.py`).
 
 Status: **proven** = repeated closed-loop gain beyond noise or an exactness proof plus a gain; **partial** = mechanism
 verified but the score gain is within noise or base-dependent; **failed** = tried and worse/null (anti-strategy);
 **untested idea** = a concrete procedure with no run yet.
 
-Path prefixes in evidence logs: `OLD` = ~/Documents/smolvla-weight-edit-6000 (SmolVLA SO-101, Nov 5–10
-2026), `HYB` = ~/Documents/hybrid-train-smolvla, `CODEX` = ~/Documents/yellow-cube-manual-weights-20261104.
-"lead b078391b" = the lead transcript in ~/.claude/projects/-Users-godbrigero-Documents-astra-direct-weight-edit/.
+Path prefixes in evidence logs: `OLD` = the original SmolVLA SO-101 weight-edit project (Nov 5–10 2026), `HYB` = the
+hybrid-training project, `CODEX` = the Codex manual-weights line. Session ids (e.g. "lead b078391b") refer to the
+agent transcripts of that project. These artefacts are not shipped; the numbers are summarised in ../LESSONS.md.
 "scratchpad …" = secondary retrospective notes (verified against primary sources where cited).
 
 ## All strategies
@@ -78,35 +81,4 @@ Order when several fit: exact single-tensor fixes first (S01, S02), then axis sc
 then gates (S05/S06), then situational circuits (S13–S15); input-shift repairs (S07/S27/S28) go UPSTREAM of everything
 and do not require refitting downstream edits. Re-qualify after every link (AGENTS.md Phase 4).
 
-## Corrections to other docs
-
-Found by checking primary evidence (and an independent audit, scratchpad review/REVIEW.md §1). The other docs were not
-edited by this writer.
-
-1. **cf2 "ID reach 6/40 → 59/60"** (LESSONS.md table, APPROACH_PLAYBOOK.md row "everything broke…", the docstring of
-   edits/_example/edit.py): cf2 is **58/60** ID REACH (near 35/36); 59/60 is cf3p25. cf1 (500 scenes) already had 57/60.
-2. **"~2 days of tuning on wrong views"** (LESSONS.md "Harness first"): the circuits carried over unchanged — cf2 =
-   p17gshr + upstream maps. Real cost: finding the mismatch late plus ~4 h of camfix work (S07).
-3. **"re-plan every 10 or 25 steps, temporal ensembling (worse: 9/24 and 15/24 vs 21/24)"** (APPROACH_PLAYBOOK.md):
-   9/24 and 15/24 are the horizon test (n_action_steps 10/25 on cf3p25, measured cameras, near PICK, 2 seeds).
-   Temporal ensembling was never measured → S25 untested.
-4. **Roll servo "+3 near picks (p17gshr)"** (APPROACH_PLAYBOOK.md): within noise (net over 4 bases near +3, ID −2;
-   lead: "alignment improves, picks don't") → S13 partial.
-5. **deep8 "19/20" as a win** (LESSONS.md, APPROACH_PLAYBOOK.md, ANALYSIS_GUIDE.md "74 min"): one seed, within noise.
-   The exact method is the lesson; pad-zero's 8 → 17/20 with jitter 0.91 → 0.19 is the real win.
-6. **"Interference … shared a neuron (caught via a claim list)"** (LESSONS.md): there was no claim list; approach's
-   REPORT caught 779/1893, and the MODEL_MAP registry wrongly listed 1893/1701 as free.
-7. **Hybrid "editing the finished checkpoint once: 60/80"** (LESSONS.md, APPROACH_PLAYBOOK.md): true, but pad-zero +
-   one read-out servo (m2) already gave 60/80; the four later circuits added nothing on the main suite; ENDEDIT costs
-   +27 % held-out loss.
-8. **"Stage owners beat hypothesis testers"** (LESSONS.md): confounded — sp6 (first best-thus-far) came from a
-   mechanism brief, and wave-1 "nulls" were judged on PICK before REACH existed (S11). Supported version: give each agent
-   a metric that can see its effect, a numeric target and a fixed suite; never two agents on one hypothesis.
-9. **"14 h head/neuron hunt 5/10 vs 19/20 in 74 min"** (ANALYSIS_GUIDE.md, LESSONS.md): different models (step 2000 vs
-   6000) and tests (strict 18 s contact vs held ≥ 1 s); not a controlled comparison (S21).
-10. **"Diagnose-only swarms: 0 accepted"** (LESSONS.md, ANALYSIS_GUIDE.md): numbers right, cause confounded (Haiku,
-    forbidden to edit/score, stuck parent) (S22).
-11. **EDIT_COOKBOOK.md "Fold a linear map … fit.paired_map"**: the map that worked shrinks to the IDENTITY without an
-    intercept, λ chosen per layer by CV, teacher-forced pairs; `fit.paired_map` shrinks to zero with an intercept (S07).
-12. **"pan x1.7: near 5/12 → 31/36"** (LESSONS.md, APPROACH_PLAYBOOK.md) is REACH; under PICK it is 1/12 → 29/36, with
-    an ID PICK cost of 73 → 63/80 that the docs do not state.
+The corrections found while writing this file have been applied to LESSONS.md (the single source of numbers).

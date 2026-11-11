@@ -141,6 +141,8 @@ class Stack:
 
     def adapter(self):
         import importlib.util
+        from .variant import fresh_bytecode
+        fresh_bytecode()
         path = self.root / "env" / "adapter.py"
         if not path.exists():
             raise StackError("env/adapter.py is missing")

@@ -1,8 +1,7 @@
 """SmolVLA (LeRobot) policy on the SO-101 MuJoCo yellow-cube scene, MEASURED cameras.
 
 Port of the original project's evalpick.py (closed loop) + bench.py (staged REACH/PICK classification).
-Sim code: SO101_REPO (default ~/Documents/smolvla-weight-edit-6000/repo, which has the measured-camera fix of
-2026-11-09). Episode spec: {"i", "x", "y", "yaw", "home": [5 floats]}; policy noise seeded by (seed, i) exactly as
+Sim code: stack.json "sim_repo" or env SO101_REPO (the airtruck repo with the measured-camera fix of 2026-11-09). Episode spec: {"i", "x", "y", "yaw", "home": [5 floats]}; policy noise seeded by (seed, i) exactly as
 evalpick.py did, so results are comparable with the old runs and paired across variants.
 metrics: reach (tip within 1.5 cm horiz / 1 cm vert of cube at close, or picked), pick (cube lifted >= 2 cm).
 outcome: P picked | R reached, grip failed | s short | l long | w wide | h too high | N no attempt.
@@ -17,14 +16,20 @@ from types import SimpleNamespace
 
 import numpy as np
 
-REPO = Path(os.environ.get("SO101_REPO", Path.home() / "Documents/smolvla-weight-edit-6000/repo"))
+REPO = None   # the sim code: env SO101_REPO, or stack.json "sim_repo" (set per machine; never hard-coded here)
 os.environ.setdefault("SO101_SIM_CAMERAS", "measured")
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 SECONDS = 18.0
 REACH_XY_CM, REACH_Z_CM, PICK_LIFT_M = 1.5, 1.0, 0.02
 
 
-def _imports():
+def _imports(ctx=None):
+    global REPO
+    if REPO is None:
+        repo = os.environ.get("SO101_REPO") or (ctx.stack.cfg.get("sim_repo") if ctx is not None else None)
+        if not repo:
+            raise RuntimeError("set the sim code location: stack.json \"sim_repo\" or env SO101_REPO")
+        REPO = Path(os.path.expanduser(repo))
     if str(REPO) not in sys.path:
         sys.path.insert(0, str(REPO))
     import mujoco  # noqa
@@ -39,7 +44,7 @@ def _imports():
 
 
 def load_policy(tensors, ctx):
-    m = _imports()
+    m = _imports(ctx)
     torch = m.torch
     if m.P.CAMERA_SET != "measured":
         raise RuntimeError(f"sim camera set is {m.P.CAMERA_SET!r}, harness expects 'measured'")

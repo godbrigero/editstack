@@ -1,7 +1,7 @@
 """Leaderboard, qualification, paired comparisons and promotion to weights/best.
 
 Rules (stack.json "qualify") encode the lessons:
-  - min seeds per suite: two seeds misled twice in past runs (23/24 -> 31/36 and 24/24 -> 31/36 at the third seed)
+  - min seeds per suite: two seeds misled three times in past runs (23/24 -> 31/36, 23/24 -> 32/36, 24/24 -> 31/36)
   - an in-distribution floor so a variant cannot win by breaking the cases the model already handled
   - ranking only on suites with role "selection"; a "heldout" suite (never used for picking) must be run before
     promotion, because dozens of variants selected on the same placements overfit them (winner's curse)
@@ -244,7 +244,8 @@ def promote(stack, dry_run: bool = False, force: bool = False, variant: Optional
         from .variant import chain_hash
         if not man.exists() or json.loads(man.read_text()).get("chain_hash") != chain_hash(stack, name):
             msgs.append(f"exporting {name} ...")
-            export(stack, name)
+            out = export(stack, name)
+            msgs.append(f"exported to {out}: every tensor re-read and verified bit-exact against the in-memory variant")
     rel = os.path.relpath(target, stack.best_link.parent)
     if current == rel:
         return "\n".join(msgs + [f"weights/best already -> {name}"])

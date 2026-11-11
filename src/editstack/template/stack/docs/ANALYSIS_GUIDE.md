@@ -3,7 +3,7 @@
 Goal of analysis: turn "the model fails at X" into **"quantity Q is wrong by N at place P, because of mechanism M"**.
 Only that sentence licenses an edit. Every probe below answers one piece of it, cheaply, with a number.
 
-The order matters. In past runs, the route through structure, then code, then cheap probes reached 19/20 in 74 min.
+The order matters. In past runs, the route through structure, then code, then cheap probes reached 17/20 in 47 min (19/20 at 74 min on one seed).
 A head/neuron interpretability hunt that started deep inside the network sat at 5/10 for ~14 h. (The two used
 different checkpoints and tests, so treat this as strong judgement, not a controlled result: LESSONS.md.)
 

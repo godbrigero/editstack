@@ -75,13 +75,13 @@ Python: `from editstack import Stack, ops, fit` (`ops`: exact algebra, low-rank 
 | mechanism | lesson it encodes |
 |---|---|
 | read-only original + in-memory edit chains + hash per chain | no hand-modified checkpoints; every number traceable to code |
-| runs tagged with chain hash, harness version, suite hash; stale runs ignored and archived | ~2 days were lost tuning against wrong sim cameras; results silently mixed |
-| paired seeds, Wilson intervals, sign test vs parent | two-seed results misled twice (23/24 -> 31/36) |
+| runs tagged with chain hash, harness version, suite hash; stale runs ignored and archived | a camera mismatch found on day 4 collapsed the best variant (6/40) until a camera-transfer stage; results silently mixed |
+| paired seeds, Wilson intervals, sign test vs parent | two-seed results misled three times (e.g. 23/24 -> 31/36 at seed 3) |
 | qualification rules + mandatory held-out suite before promotion | winner's curse from selecting dozens of variants on the same placements |
 | machine-wide RAM slots (flock, crash-safe) | 15 model processes once hit ~110 GB |
 | claims registry for neurons/channels | two agents once wired circuits into the same neurons |
 | detach + wait + resumable evals | agents polled with sleep loops; network drops killed turns |
-| stage-owner briefs (`agent new`) | stage owners produced every best variant; hypothesis-only agents and diagnose-only swarms did not |
+| owner briefs (`agent new`) | agents need a staged metric that can SEE their effect, a numeric target and a fixed suite; never two on one quantity |
 
 ## Presets (`editstack presets`)
 

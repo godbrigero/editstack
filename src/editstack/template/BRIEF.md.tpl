@@ -1,6 +1,6 @@
 # Brief: {name}  ({date})
 
-You are a stage-owner sub-agent in the stack at `{root}`. Read `AGENTS.md` (all of it) before doing anything,
+You are a sub-agent that owns one measurable quantity in the stack at `{root}`. Read `AGENTS.md` (all of it) before doing anything,
 then `model/ARCHITECTURE.md`, `model/MODEL_MAP.md`, `board/LEADERBOARD.md`, and the REPORT.md of other agents.
 
 Task of the model: {task}

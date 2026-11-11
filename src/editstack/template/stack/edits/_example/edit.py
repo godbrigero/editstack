@@ -4,7 +4,7 @@
    loss only on 6, but the 26 padding channels fed fresh noise back in at every denoising step -> jitter.
    Zeroing those input columns: jitter 4-6x lower, success 8/20 -> 17/20.
 2. Fold a fitted linear map into a layer (closed form): features under measured cameras mapped back to the
-   training-camera features -> in-distribution reach 6/40 -> 59/60 after a camera change.
+   training-camera features -> in-distribution reach 6/40 -> 58/60 after a camera change.
 3. Gated product circuit in two spare SwiGLU units: correction = (planned - current) * gain_readout, exactly zero
    while holding still, so in-distribution behaviour is untouched.
 """

@@ -35,7 +35,8 @@ circuits carried over unchanged to the measured cameras.
 3. **Per-layer map, ridge shrunk to the identity** (not to zero): with X = new, Y = training (rows = samples),
    A_L = (XᵀX + λI)⁻¹(XᵀY + λI), λ = λ'·n_rows/1000, λ' chosen per layer by 5-fold CV from {0.3, 1, 3, 10}
    on "fraction of the camera-induced difference left" ‖Y − XA‖²/‖Y − X‖².
-   (`fit.paired_map` shrinks to zero with an intercept; for this use compute the identity-shrunk solve yourself.)
+   (`fit.paired_map` shrinks M toward the identity by default; pass `intercept=False` for readers without a bias,
+   e.g. attention o_proj.)
 4. **Fold**: o_proj computes y = W·o; we want W·(A_Lᵀ o_new): `ops.fold_input_map(W, f"...layers.{L}.self_attn.o_proj.weight", A_L.T)`
    for all 16 layers (`cf.apply_maps` does W ← W·(I + α(A − I))ᵀ, α = 1).
 5. Optionally restore a gain the map does not fully recover with a small gated circuit (cf3p25: `cf.low_pan_gain`,

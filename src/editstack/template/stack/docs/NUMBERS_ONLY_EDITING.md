@@ -6,16 +6,16 @@ The job is the same as usual: turn "it fails at X" into "quantity Q is wrong by 
 M" (ANALYSIS_GUIDE.md), then apply an exact edit. What changes is where each fact comes from: shapes, statistics,
 the description, and re-implementing small blocks in numpy.
 
-The archetype is `astra-direct-weight-edit/`. It holds `model_info.md` (9 KB, SmolVLA with every name removed),
-`model.txt` (L1–L5, 22 MB), `model_2.txt` (L6–L397, 5.9 GB) and `eval_output.py` (a fake scorer). The user's prompt
-was "you can see the model, model_info.md, model.txt, model_2.txt ... it jitters and fails to pick up the cube ...
-manually edit the weights. No backprop" (b078391b 22:40Z Nov 5; Codex parent 04:22Z Nov 5).
+The archetype is a folder that holds `model_info.md` (9 KB, SmolVLA with every name removed),
+`model.txt` (L1–L5, 22 MB), `model_2.txt` (L6–L397, 5.9 GB) and `eval_output.py` (a fake scorer). The task given
+was, in short: here are the description and the weight dumps; the policy jitters and fails to pick up the cube; fix
+it by editing the weights by hand, no backprop (b078391b 22:40Z Nov 5; Codex parent 04:22Z Nov 5).
 
 Citation key: `b078391b HH:MM` = lead Claude session (UTC, Nov 5 unless stated). `Codex HH:MM` = Codex parent
 rollout 2026-11-04T23-22-02. `ID-agents` = the Codex numbers-only identification rollouts 21-28-44 / 21-32-21.
 `np` = recomputed with numpy on model.txt for this guide (evidence log: scratchpad numbers_evidence.md).
 
-Be honest about the record. The lead session that reached 19/20 in 74 min read model_info.md first (22:40:59).
+Be honest about the record. The lead session that reached 19/20 (one seed) in 74 min read model_info.md first (22:40:59).
 It then found and used the real checkpoint, the lerobot source and a MuJoCo sim (22:41–22:54). Every fact that
 its two winning edits needed is also in model_info.md + model.txt, and that is checked below (§3–§5). The Codex
 parent worked from the anonymised dumps and found the same pad-zero edit from the L1 numbers in 8 minutes
@@ -27,7 +27,7 @@ parent worked from the anonymised dumps and found the same pad-zero edit from th
 
 1. **Structure before neurons.** Interface dims, padding, loss masks, normalisation and the sampling loop
    produced the biggest wins. The head/neuron line plateaued for ~14 h at 5/10 (Codex 10:18 → Nov 7). The
-   structure line reached 19/20 in 74 min (b078391b 22:40 → 23:54).
+   structure line reached 17/20 in 47 min and 19/20 (one seed) in 74 min (b078391b 22:40 → 23:54).
 2. **Read the scorer's source before you trust a single number from it.** `eval_output.py` prints a step function
    of how many times it has been called (THRESHOLDS = 1, 23, 50, …). Two identification agents called it 27
    times between them. One of them read the jump to "2" on call 23 as progress (ID-agents 04:20, 04:44).
@@ -284,8 +284,8 @@ overshot, so it was dropped (p5, 23:19–23:24). Keep it as a tool, not a fix.
   - deep8: 4 tensors, 520,083 values, rank 1 in the time half, relative changes 0.161 / 0.0106 / 0.144, "shift
     by Δ" exact to 1e-8.
 - **Values-changed budgets are a proxy.** Negotiate them with this table:
-  - User reaction to a 214,284,189-value rewrite (47.6% of the model; 214,258,308 values zeroed; vision disconnected):
-    "you just encoded a controller" (Codex 05:53–06:18).
+  - A 214,284,189-value rewrite (47.6% of the model; 214,258,308 values zeroed; vision disconnected) was rejected by
+    the user as a hard-coded controller rather than an edit (Codex 05:53–06:18).
   - Codex then worked under <100,000 values: 2,260 → 1/10, 2,979 → 2/10, 3,699 → 3/10, 88,332 → 5/10
     (Codex 07:28–10:06).
   - The exact translation would not fit under that cap, though it is rank 1 and changes the time half by 1%.
@@ -367,7 +367,7 @@ Box rules:
 - Edit in memory from code. Do not write checkpoint copies (each one costs 865 MB; this filled the disk at 23:40).
   Do float64 algebra on CPU copies, then copy back in the storage dtype (MPS has no float64: the error at 23:41).
 - One owner per hypothesis. The lead does steps 1–5 alone. Delegate only from step 6 on, and only with a
-  numeric target (ORCHESTRATION.md).
+  numeric target (AGENT_FLEET.md).
 
 ## 9. Slow path: what made the Codex/Haiku line slow (avoid)
 

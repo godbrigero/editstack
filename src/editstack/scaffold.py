@@ -19,13 +19,15 @@ def list_presets():
 
 
 def resolve_preset(preset) -> Path:
-    """A preset is a bundled name (editstack new --preset smolvla-so101) or a folder path."""
-    p = Path(preset).expanduser()
+    """A preset is a bundled name (editstack new --preset smolvla-so101) or a folder path. A bare name always means
+    the bundled preset (a same-named folder in the current directory does not shadow it); use ./name for a folder."""
+    name = str(preset)
+    if "/" not in name and not name.startswith(".") and (PRESETS / name).is_dir():
+        return (PRESETS / name).resolve()
+    p = Path(name).expanduser()
     if p.is_dir():
         return p.resolve()
-    if (PRESETS / str(preset)).is_dir():
-        return (PRESETS / str(preset)).resolve()
-    raise SystemExit(f"unknown preset {preset!r}; bundled: {list_presets()} (or pass a folder)")
+    raise SystemExit(f"unknown preset {preset!r}; bundled: {list_presets()} (or pass a folder path)")
 
 
 def _copy_tree(src: Path, dst: Path) -> None:

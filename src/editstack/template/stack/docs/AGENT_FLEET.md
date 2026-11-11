@@ -1,10 +1,9 @@
 # Agent fleet: who to start, on which model, with what brief
 
-Read this if you are the lead and are about to start, brief, wait on, resume or stop another agent. `ORCHESTRATION.md`
-is the one-page version and `../AGENTS.md` §3 has the rules. This file has the reasons, the numbers, the templates and
-the procedure. Evidence: about 85 Claude sessions and one Codex thread from the SmolVLA SO-101 project (Nov 5–10 2026).
-Times are UTC. A session id such as `e5bc0951` refers to a Claude Code transcript. The evidence log, with the parse
-method, is in the retrospective's scratchpad as `fleet_evidence.md` (E1–E10 below refer to its sections).
+Read this if you are the lead and are about to start, brief, wait on, resume or stop another agent. `../AGENTS.md` §3
+is the short version. The roster table below is the quick reference; the rest of this file is the reasons, the numbers,
+the brief templates (§7) and the procedure. Evidence: about 85 Claude sessions and one Codex thread from the SmolVLA SO-101 project (Nov 5–10 2026).
+Times are UTC. A session id such as `e5bc0951` refers to a Claude Code transcript. E1–E10 below refer to sections of the retrospective's evidence log (not shipped).
 
 Where the evidence is thin, a recommendation is marked **[judgement]**. Everything else has a number behind it.
 
@@ -15,7 +14,7 @@ Where the evidence is thin, a recommendation is marked **[judgement]**. Everythi
 | role | how many | tier | when |
 |---|---|---|---|
 | Lead / orchestrator | 1, for the whole task | frontier (Opus) | always. Alone for Phases 0–2 |
-| Stage owner (research) | ≤ `N_research` (§3), usually 2–3 | frontier (Opus), high effort | from Phase 3 on, one per independent stage |
+| Stage owner (research) | ≤ `N_research` (§3), 2 on a 60 GB machine, 3 at most | frontier (Opus), high effort | from Phase 3 on, one per independent stage |
 | Doc / render | 1 at a time, one folder each | mid (Sonnet). Frontier if the doc needs analysis | whenever the user wants pictures, pages or write-ups |
 | Status digest | 0 agents. Use `editstack status` | none (or fast, if you must) | instead of polling |
 | Independent reviewer / verifier | 1 per claim set, before promotion or publication | frontier | before you promote, publish numbers or write rules |
@@ -48,7 +47,7 @@ So "Opus did X" is well measured, Sonnet has n = 2, and Haiku has n = 27, but un
 - **Owns:** the harness, Phases 0–2, the causal sentence, the chain, merges, promotion, real hardware and the user.
 - **Measured:** b078391b ran 11-05 22:40 → 11-10 19:39 (117 h span), with only **557 min active** (gaps < 5 min).
   - 746 tool calls, 19 delegations and 26 follow-ups.
-  - Alone, it derived pad0 (8/20 → 17/20 by 23:54, 74 min after start) and pan ×1.7 (`scale_axis`, verified offline
+  - Alone, it derived pad0 (8/20 → 17/20 by 23:27, 47 min after start; deep8 19/20 at 23:54 on one seed) and pan ×1.7 (`scale_axis`, verified offline
     before any sim, 11-07 01:24). pan ×1.7 was the base of every later best.
   - It built the shared tooling the agents depended on: `bench.py` staged metric, `slots.py`, `CONTEXT.md`,
     `update_best.py`.
@@ -111,8 +110,8 @@ So "Opus did X" is well measured, Sonnet has n = 2, and Haiku has n = 27, but un
     found that they "match the saved suite scores".
 - **Failure seen:** two overlapping doc briefs launched 4 min apart (11112160 at 01:24, ee2243b0 at 01:28). The second
   reported "Most of this already existed from the earlier pass".
-- **Why it pays:** the user's own words were "have a separate agent do the documenting … don't do it manually, you lose
-  context" (11-06 23:52). GIF/HTML work never entered the lead's context.
+- **Why it pays:** the user asked for documentation to go to a separate agent so the lead would not lose context
+  (11-06 23:52). GIF/HTML work never entered the lead's context.
 - **Tier: mid (Sonnet) for renders, pages and GIFs** (n = 2 Sonnet, both successful, and the job is mechanical).
   - Use **frontier** when the doc needs analysis, e.g. a network map, or a MODEL_MAP backfill that must judge what is a
     fact.
@@ -231,7 +230,7 @@ N_fast     = 0 by default; <= 3, CPU-only, no model processes
 ```
 - With 60 GB and SmolVLA, this gives **2 stage owners, 3 at most**. Wave 2 ran 3 (approach, grasp, shadow) and fit
   until the hybrid project took the pool. Wave 1 ran 4 plus renderers and caused the 110 GB incident.
-- Agents are not processes. A stage owner holds its slots while it waits on sims (56–86% idle), so a third agent only
+- Agents are not processes. A stage owner holds its slots while it waits on sims (25–86% idle; 7 of 9 above 55%), so a third agent only
   helps if the first two leave slots free. Check `editstack slots`. If slots are full for > 30 min, an extra agent only
   lengthens the queue.
 - **When adding agents stops helping:**
@@ -370,8 +369,8 @@ Then run analysts (frontier, 3–5 in parallel, one source each) and a reviewer 
 ### 5.6 Go-aheads and defaults
 - At 03:46 (11-07) the lead wrote: "I'm still waiting for your go-ahead to stop servo and pancost and start the approach
   and grasp agents". It asked again at 03:52.
-- At 05:02 the user wrote: "what are the agents waiting for? you can use up to 50gigs". At 05:03 the lead answered:
-  "They were mostly waiting on me."
+- At 05:02 the user asked what the agents were waiting for (and raised the RAM allowance). At 05:03 the lead
+  acknowledged they were mostly waiting on the lead itself.
 - Cost: **77 min** with three research agents finished and the RAM pool mostly idle (servo alone, ~18 GB).
 - Rule for every role: when a choice comes up, state the default you will take and take it in the same turn. Ask only
   for things that are irreversible or outside the brief (hardware, deleting others' files, changing the success
@@ -400,7 +399,8 @@ Must:
 - end with the fixed final message (§6.8).
 
 Never:
-- write outside your folder (except append-only MODEL_MAP lines and registering variants on the board);
+- write outside your folder, except: your own `edits/<name>_*` variants, append-only MODEL_MAP.md lines,
+  `editstack learn` (LEARNINGS + strategy evidence logs) and runs produced through the CLI;
 - bypass slots;
 - touch hardware;
 - copy checkpoints;
@@ -431,8 +431,10 @@ Must:
 - own exactly the stage in the brief and report other stages only as numbers;
 - start from the named prior artefacts;
 - verify offline (exactness, κ before/after, first-chunk aim) before any closed-loop sim;
-- claim neurons/channels in `model/CLAIMS.json` before evaluating (approach and grasp both used L15 1893);
-- register every variant with ≥ 3 seeds on the board;
+- reserve neurons/channels as soon as you pick them: `editstack claims reserve <variant> <tensor> <axis> <idx>`, and
+  `ctx.claim(...)` in edit.py (approach and grasp both used L15 1893);
+- evaluate with `editstack qualify <variant>` (seed 0 + paired early stop, then the qualification seeds); a variant
+  counts only when the board says qualified;
 - write negative results to MODEL_MAP;
 - report paired standard errors, and call a result within noise if it is (grasp: roll "within noise").
 
@@ -514,8 +516,8 @@ did.
 
 ### 7.1 Stage owner
 ```
-You are "<name>", a stage owner on a weight-editing task. Folder: <abs path>/agents/<name>/ (write only here,
-plus append-only model/MODEL_MAP.md and the board). Read AGENTS.md and agents/<name>/BRIEF.md; read MODEL_MAP lines <a-b>.
+You are "<name>", the owner of one measurable quantity on a weight-editing task. Folder: <abs path>/agents/<name>/
+(write only here, your edits/<name>_* variants, append-only model/MODEL_MAP.md and `editstack learn`). Read AGENTS.md and agents/<name>/BRIEF.md; read MODEL_MAP lines <a-b>.
 
 STAGE YOU OWN: <stage>, measured by <staged label, e.g. REACH = P+R> on <suite>. Other stages belong to <agents>;
 report them only as numbers.
@@ -640,51 +642,4 @@ Trade-offs:
 
 ---------------------------------------------------------------------------------------------------------------
 
-## 9. Corrections to other docs
-
-The evidence above contradicts or refines these statements. A reviewer may correct the numbers there; until then, this
-section wins.
-
-1. **ORCHESTRATION.md "Not by hypothesis"; AGENTS.md §3 "What did not: 'test this theory' briefs"; LESSONS.md "Stage
-   owners beat hypothesis testers … Agents owning REACH, GRIP, CAMERAS produced every best variant".** Wrong as stated.
-   - sp6, the first best-thus-far, came from servo, whose brief says "The user's observation, which is your theory to
-     test" (94ec644b). pan17 came from the lead.
-   - Wave 1 was scored on PICK only. Latent and circuit did fix reach (radial −3 cm → ~0), and latent's r1a scored
-     23/24 REACH once REACH existed (11-07 03:46) and fed r1a_xg, a best-thus-far.
-   - Wave 2 built on wave 1 (approach's goal 1: "Qualify the reach fix (latent r1a)").
-   - Supported rule: every agent needs a staged metric that can see its effect, a numeric target and a fixed suite.
-     Mechanism briefs are fine. Two agents on one hypothesis is bad (latent and circuit, confirmed).
-2. **ORCHESTRATION.md "Phases 0-2: never … Splitting them produced 27 agents and 0 accepted candidates, while one lead
-   got 19/20 in 74 min"; AGENTS.md §3 "diagnose-only swarms (27 small read-only agents: 0 accepted candidates)";
-   LESSONS.md "Diagnose-only swarms fail".** Confounded.
-   - The 27 were Haiku children of a different (Codex/GPT-6) orchestrator, forbidden by their briefs to edit or score,
-     under a parent stuck at 5/10 since 11-05 10:04. Zero was guaranteed by design.
-   - The 74-min lead used the step-6000 checkpoint and a lenient 20-episode test. Codex used step-2000 and a strict
-     10-case test, and Codex also found pad-zero (0/5 on its test).
-   - Supported conclusions: diagnose-only, no-scoring briefs under a stuck parent are useless; Phases 0–2 are better
-     done by one agent holding the whole context [judgement, backed by pad0/pan17 being lead-solo wins].
-   - The evidence does not show that the fast tier is useless (§1.7).
-3. **ORCHESTRATION.md "don't wait for a go-ahead: two agents once idled ~80 min"; AGENTS.md §5 "agents waiting for a
-   go-ahead".** The waiter was the lead. It held the two not-yet-launched agents (approach, grasp) for a user go-ahead it
-   had asked for (11-07 03:46 → 05:03, 77 min). The rule stands and applies to the lead too.
-4. **ORCHESTRATION.md "~75 result checks and 27 sleeps grew the lead's context to ~780k tokens"; AGENTS.md §3 "Polling
-   and re-running agents' evals bloated the lead's context to ~780k".** The peak (780,301 at 11-07 21:30) came during
-   the hybrid side project, not the research waves. Polling contributed (77 agent-folder reads, 27 sleeps); the side
-   project is the larger cause. The "re-running agents' evals" were mostly the lead's own variants on an agent's line
-   (r1a_g105 on latent's r1a, 03:23), not literal re-runs.
-5. **LESSONS.md "Two seeds misled twice (23/24 -> 31/36; 24/24 -> 31/36)".** Three times:
-   - r1a_xg: 23/24 → 31/36 (REACH);
-   - sph6: 23/24 → 32/36;
-   - grh20: 24/24 → 31/36 (PICK).
-6. **LESSONS.md "Throughput peak 250-330 episodes/h at 6 processes"; ORCHESTRATION.md formula giving 3 agents.** Peak
-   326 episodes/h came at ~4.7 busy processes. At ~6, throughput fell to 254 (83 s per episode vs 33 s uncontended).
-   Use `N_research = floor(min(P_ram, P_sat) / 2)`, i.e. 2 here and 3 at most (§3.2).
-7. **ORCHESTRATION.md / LESSONS.md "agents idled 60-85%".** Measured 25–86% (gaps > 5 min). 7 of 9 were above 55%;
-   camfix, at 25%, was the outlier that kept a queue of short jobs.
-8. **ORCHESTRATION.md "cheap doc agents"; AGENTS.md §3 "(cheap, high value per minute)".** All 9 doc agents in the main
-   project ran on Opus. They were cheap in time (4–51 min), not in tier. Sonnet is evidenced only by 2 hybrid doc agents
-   (both delivered).
-9. **LESSONS.md "Interference … sharing a neuron (caught via a claim list)".** There was no claim list. Approach caught
-   the L15 779/1893 collision itself, and later the MODEL_MAP registry was itself wrong about free neurons. Make claims
-   automatic (`model/CLAIMS.json`), not a convention.
-10. **LESSONS.md / APPROACH_PLAYBOOK.md "cf2 … ID reach 6/40 -> 59/60".** cf2 = 58/60. 59/60 is cf3p25.
+The corrections found while writing this file have been applied to LESSONS.md (the single source of numbers).
