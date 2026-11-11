@@ -6,7 +6,9 @@ SmolVLA robot policy (see docs/LESSONS.md for the evidence behind every rule). F
 because it removes guesswork: every edit is derived, every claim is measured, every number is comparable.
 
 Read first: `stack.json` (task, metrics, qualification rules), `model/ARCHITECTURE.md`, `model/MODEL_MAP.md`,
-`board/LEADERBOARD.md`, and `editstack status`.
+`board/LEADERBOARD.md`, and `editstack status`. The guides in `docs/` (index: `docs/README.md`) go deeper:
+HARNESS_AUDIT (Phase 0), ANALYSIS_GUIDE (how to analyse a model, Phases 1-2), APPROACH_PLAYBOOK (symptom -> edit),
+EDIT_COOKBOOK (recipes), ORCHESTRATION (lead), LESSONS (evidence).
 
 ---------------------------------------------------------------------------------------------------------------
 
