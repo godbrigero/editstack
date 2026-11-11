@@ -70,6 +70,8 @@ def new_stack(dest: Path, weights: Optional[Path], name: str = "", task: str = "
         cfg["preset"] = str(preset)
     (dest / "stack.json").write_text(json.dumps(cfg, indent=2) + "\n")
     _render_readme(dest, cfg, preset)
+    from .knowledge import record_versions
+    record_versions(dest)
     orig = dest / "weights" / "original"
     orig.mkdir(parents=True, exist_ok=True)
     if weights:

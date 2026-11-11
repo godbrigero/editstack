@@ -115,3 +115,26 @@ def test_bf16_rounding_exact():
     f = bf16_to_f32(u)
     ok = ~np.isnan(f)
     assert np.array_equal(f32_to_bf16(f[ok]), u[ok])           # every bf16 value round-trips
+
+
+def test_knowledge_loop(stack):
+    sdir = stack / "docs" / "strategies"
+    sdir.mkdir(exist_ok=True)
+    (sdir / "S99-test.md").write_text("# S99 test\n\nStatus: untested idea\n\n## Evidence log\n\n- seed line\n\n## Notes\nx\n")
+    r = cli("learn", "pad0 fixed it: 0/36 -> 36/36", "--strategy", "S99", "--outcome", "win",
+            "--evidence", "runs/pad0/ood", cwd=stack)
+    assert "S99-test.md" in r.stdout
+    txt = (sdir / "S99-test.md").read_text()
+    assert txt.index("36/36") < txt.index("## Notes")                     # appended inside the evidence log
+    assert "36/36" in (stack / "docs" / "LEARNINGS.md").read_text()
+    assert cli("learn", "x", "--outcome", "win", cwd=stack, check=False).returncode != 0   # wins need evidence
+    # local edit survives a sync; upstream copy lands beside it
+    agents_md = stack / "AGENTS.md"
+    agents_md.write_text(agents_md.read_text() + "\nLOCAL RULE\n")
+    out = cli("docs", "sync", cwd=stack).stdout
+    assert "CONFLICT AGENTS.md" in out and "LOCAL RULE" in agents_md.read_text()
+    assert (stack / "AGENTS.md.upstream").exists()
+    patch = cli("docs", "contribute", cwd=stack).stdout
+    p = Path(patch.split("wrote ")[1].split("\n")[0])
+    body = p.read_text()
+    assert "LOCAL RULE" in body and "S99-test.md" in body and "36/36" in body

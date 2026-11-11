@@ -115,6 +115,22 @@ def main(argv=None) -> None:
     sub.add_parser("guide", help="print the path of the agent guide (AGENTS.md)")
     sub.add_parser("presets", help="list bundled model-family presets")
 
+    a = sub.add_parser("learn", help="record a learning (journal + a strategy's evidence log)")
+    a.add_argument("text", help="what happened, with numbers")
+    a.add_argument("--outcome", default="info", help="win | loss | neutral | mixed | info")
+    a.add_argument("--evidence", default="", help="run dir / probe output / board line")
+    a.add_argument("--strategy", help="strategy id, e.g. S03 (docs/strategies/)")
+    a.add_argument("--variant", default="")
+    a.add_argument("--agent", default="")
+
+    a = sub.add_parser("docs", help="the evolving knowledge base")
+    ds = a.add_subparsers(dest="sub", required=True)
+    b = ds.add_parser("sync", help="update this stack's guides from the installed editstack (never clobbers local edits)")
+    b.add_argument("--dry-run", action="store_true")
+    b = ds.add_parser("contribute", help="write a patch of this stack's learnings + guide edits for the editstack repo")
+    b.add_argument("--out")
+    ds.add_parser("index", help="print the guide reading order")
+
     a = sub.add_parser("run", help="run a python script with the stack on sys.path under the stack's python")
     a.add_argument("script")
     a.add_argument("args", nargs=argparse.REMAINDER)
@@ -214,6 +230,19 @@ def _dispatch(args, argv) -> None:
         from .claims import load
         for c in load(st):
             print(f"{c['variant']:16s} {c['owner']:10s} {c['tensor']} axis {c['axis']} idx {c['indices'][:16]} - {c['purpose']}")
+    elif cmd == "learn":
+        from .knowledge import learn
+        for f in learn(st, args.text, args.strategy, args.outcome, args.evidence, args.agent, args.variant):
+            print(f"recorded in {f.relative_to(st.root)}")
+    elif cmd == "docs":
+        from . import knowledge
+        if args.sub == "sync":
+            print("\n".join(knowledge.sync(st, args.dry_run)))
+        elif args.sub == "contribute":
+            out = knowledge.contribute(st, Path(args.out) if args.out else None)
+            print(f"wrote {out}\nTo share it: open a PR to the editstack repo with this patch (ask the user first; it publishes).")
+        else:
+            print((st.root / "docs" / "README.md").read_text())
     elif cmd == "guide":
         print(st.root / "AGENTS.md")
     elif cmd == "status":
