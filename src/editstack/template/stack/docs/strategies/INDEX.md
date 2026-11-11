@@ -10,8 +10,8 @@ Status: **proven** = repeated closed-loop gain beyond noise or an exactness proo
 verified but the score gain is within noise or base-dependent; **failed** = tried and worse/null (anti-strategy);
 **untested idea** = a concrete procedure with no run yet.
 
-Path prefixes in evidence logs: `OLD` = /Users/godbrigero/Documents/smolvla-weight-edit-6000 (SmolVLA SO-101, Nov 5–10
-2026), `HYB` = /Users/godbrigero/Documents/hybrid-train-smolvla, `CODEX` = /Users/godbrigero/Documents/yellow-cube-manual-weights-20261104.
+Path prefixes in evidence logs: `OLD` = ~/Documents/smolvla-weight-edit-6000 (SmolVLA SO-101, Nov 5–10
+2026), `HYB` = ~/Documents/hybrid-train-smolvla, `CODEX` = ~/Documents/yellow-cube-manual-weights-20261104.
 "lead b078391b" = the lead transcript in ~/.claude/projects/-Users-godbrigero-Documents-astra-direct-weight-edit/.
 "scratchpad …" = secondary retrospective notes (verified against primary sources where cited).
 

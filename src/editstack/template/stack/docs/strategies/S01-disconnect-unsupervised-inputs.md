@@ -3,8 +3,8 @@
 Status: proven
 Last updated: 2026-11-10
 
-Path prefixes used in this library: `OLD` = /Users/godbrigero/Documents/smolvla-weight-edit-6000,
-`HYB` = /Users/godbrigero/Documents/hybrid-train-smolvla, `CODEX` = /Users/godbrigero/Documents/yellow-cube-manual-weights-20261104.
+Path prefixes used in this library: `OLD` = ~/Documents/smolvla-weight-edit-6000,
+`HYB` = ~/Documents/hybrid-train-smolvla, `CODEX` = ~/Documents/yellow-cube-manual-weights-20261104.
 
 ## When to use
 - High-frequency wiggle inside each output chunk (second difference of commanded actions within a chunk is large),
