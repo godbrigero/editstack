@@ -3,8 +3,9 @@
 Goal of analysis: turn "the model fails at X" into **"quantity Q is wrong by N at place P, because of mechanism M"**.
 Only that sentence licenses an edit. Every probe below answers one piece of it, cheaply, with a number.
 
-The order matters. Past runs show it: the route through structure, then code, then cheap probes reached 19/20 in
-74 min. A head/neuron interpretability hunt that started deep inside the network sat at 5/10 for ~14 h.
+The order matters. In past runs, the route through structure, then code, then cheap probes reached 19/20 in 74 min.
+A head/neuron interpretability hunt that started deep inside the network sat at 5/10 for ~14 h. (The two used
+different checkpoints and tests, so treat this as strong judgement, not a controlled result: LESSONS.md.)
 
 ---------------------------------------------------------------------------------------------------------------
 
@@ -79,5 +80,6 @@ prediction that misses is information: record it in MODEL_MAP.md under negative 
 - Naive output-bias nudges instead of exact algebra: a naive bias shift moved joints 6.2/8.5/-14.9 against a
   1.5/1.5/-3.1 target, while the exact translation hit it.
 - Tuning a global output gain (x1.2 made success worse, 8/20 -> 6/20) without knowing which axis is under-gained.
-- Many tiny read-only agents each re-deriving the same context (27 agents, 0 accepted candidates).
+- Many small read-only agents each re-deriving the same context, forbidden to edit or score (27 agents, 0 accepted:
+  the brief design guaranteed it; see AGENT_FLEET.md).
 - Explaining from videos instead of measured errors.

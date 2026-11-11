@@ -54,9 +54,16 @@ def fit_delta(X: np.ndarray, Y_target: np.ndarray, W: np.ndarray, b: Optional[np
     return D, c
 
 
-def paired_map(X_new: np.ndarray, X_old: np.ndarray, lam: float = 1e-3):
-    """Linear map (M, c) with M x_new + c ~= x_old (paired samples of the same states under two conditions, e.g.
-    renders from measured vs training cameras). Fold into the reader with ops.fold_input_map(W, w, M, b, c)."""
+def paired_map(X_new: np.ndarray, X_old: np.ndarray, lam: float = 1e-3, shrink_to_identity: bool = True):
+    """Linear map (M, c) with M x_new + c ~= x_old, from paired samples of the same states under two conditions
+    (e.g. renders from measured vs training cameras). Fold into the reader with ops.fold_input_map(W, w, M, b, c).
+    With equal dims the ridge penalty shrinks M toward the IDENTITY ("no change"), not toward zero: with weak data a
+    camera map should do nothing rather than erase the features (the map that worked behaved this way)."""
+    X_new = np.asarray(X_new, np.float64)
+    X_old = np.asarray(X_old, np.float64)
+    if shrink_to_identity and X_new.shape[1] == X_old.shape[1]:
+        B, c = ridge(X_new, X_old - X_new, lam=lam, intercept=True)      # residual map Delta, M = I + Delta^T
+        return np.eye(X_new.shape[1]) + B.T, c
     B, c = ridge(X_new, X_old, lam=lam, intercept=True)
     return B.T, c
 

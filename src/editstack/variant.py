@@ -108,8 +108,8 @@ def _env_fingerprint(stack) -> bytes:
     """Helper modules edits may import (env/*.py except the adapter) + the original weights' recorded hashes."""
     h = hashlib.sha256()
     env = stack.root / "env"
-    for f in sorted(env.glob("**/*.py")) if env.exists() else []:
-        if f.name != "adapter.py" and "__pycache__" not in f.parts:
+    for f in sorted(env.rglob("*")) if env.exists() else []:
+        if f.is_file() and f.name != "adapter.py" and "__pycache__" not in f.parts and not f.name.endswith(".pyc"):
             h.update(f.relative_to(env).as_posix().encode())
             h.update(f.read_bytes())
     ref = stack.model_dir / "ORIGINAL.sha256.json"

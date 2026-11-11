@@ -1,210 +1,193 @@
 # Agent guide: editing this model's weights
 
-You are editing the weights of ONE model (this stack) by hand: no gradient training, no new data, unless the user
-explicitly says otherwise. This guide is the distilled result of ~5 days and ~50 agent sessions of hand-editing a
-SmolVLA robot policy (see docs/LESSONS.md for the evidence behind every rule). Follow it in order. It is fast
-because it removes guesswork: every edit is derived, every claim is measured, every number is comparable.
+You are editing the weights of ONE model (this stack) by hand: no gradient training and no new data, unless the user
+explicitly says otherwise. This guide and `docs/` distil ~5 days and ~50 agent sessions of hand-editing a SmolVLA
+robot policy, corrected by an independent evidence audit. Every rule has evidence in `docs/LESSONS.md`. The
+guidance is fast because it removes guesswork: every edit is derived, every claim is measured, and every number is
+comparable. It is a living knowledge base: Phase 6 is how you improve it.
 
-Read first: `stack.json` (task, metrics, qualification rules), `model/ARCHITECTURE.md`, `model/MODEL_MAP.md`,
-`board/LEADERBOARD.md`, and `editstack status`. The guides in `docs/` (index: `docs/README.md`) go deeper:
-HARNESS_AUDIT (Phase 0), ANALYSIS_GUIDE (how to analyse a model, Phases 1-2), APPROACH_PLAYBOOK (symptom -> edit),
-EDIT_COOKBOOK (recipes), ORCHESTRATION (lead), LESSONS (evidence).
+**Start:** run `editstack status`, then read `stack.json` (task, metrics, qualification rules), `model/ARCHITECTURE.md`,
+`model/MODEL_MAP.md` and `board/LEADERBOARD.md`. Then read the guides you need (`docs/README.md` is the index):
+
+| situation | read |
+|---|---|
+| first time in this stack | this file, then `docs/HARNESS_AUDIT.md` |
+| understanding the model / locating a failure | `docs/ANALYSIS_GUIDE.md` |
+| only numbers + a description (no code, anonymous tensors) | `docs/NUMBERS_ONLY_EDITING.md` |
+| choosing what to do about a measured symptom | `docs/strategies/INDEX.md` (30 strategies; quick table: `docs/APPROACH_PLAYBOOK.md`) |
+| executing an edit | the strategy file + `docs/EDIT_COOKBOOK.md` |
+| you are the lead, or you are about to start agents | `docs/AGENT_FLEET.md` (one-page summary: `docs/ORCHESTRATION.md`) |
+| a number or rule seems wrong | `docs/LESSONS.md` (single source of numbers), then Phase 6 |
 
 ---------------------------------------------------------------------------------------------------------------
 
 ## 0. Ground rules (non-negotiable)
 
-1. **`weights/original/` is read-only.** Never write to it. Every variant is `original + edit chain`, applied in
-   memory. `editstack verify` must always pass.
-2. **Every edit is code in `edits/<variant>/edit.py`** (+ fitted arrays in `edits/<variant>/data/`). No edits
-   in notebooks, probes or one-off scripts. No hand-modified checkpoint files. One variant = one directory.
-3. **Scripts live in exactly three places:** `env/` (the sim/model adapter, owned by the lead), `probes/` (shared,
-   reusable probes), `agents/<name>/` (an agent's own scratch scripts and data). Nothing at the stack root.
-4. **Never state a result you did not measure.** Every number in a report cites a run dir, a probe output file or
-   a command. "Should work" is not a result.
-5. **Only the leaderboard decides.** A variant is better only if `editstack board` says so under the
-   qualification rules. Do not promote on 2 seeds, on a screen, or on a feeling.
-6. **RAM: every model process goes through `editstack` (eval/policy) which takes a machine-wide slot.** Never
-   load the model outside it, never raise the budget, never bypass it. (`editstack slots` shows usage.)
-7. **Real hardware only when the user allows it, after sim qualification, with a written expected result.**
-   Sub-agents never drive hardware.
-8. **Do not delete or "clean up" anything you did not create.** Archive instead. Past runs lost a best
-   checkpoint and another agent's captures this way.
-9. **If the success definition, cameras, sim, or scoring changes, bump `harness_version` in stack.json** (old runs
-   then stop counting automatically) and note why in `model/ARCHITECTURE.md` section 5.
+1. **`weights/original/` is read-only.** Every variant is `original + edit chain`, applied in memory. Every eval
+   checks the original's integrity automatically; `editstack verify` does a full hash check.
+2. **Every edit is code in `edits/<variant>/edit.py`** (+ fitted arrays in `edits/<variant>/data/`). Shared exact
+   helpers live in `env/` (they are part of every variant's fingerprint). Nothing is edited in notebooks or by hand.
+3. **Scripts live in exactly three places:** `env/` (adapter + helpers, owned by the lead), `probes/` (shared probes),
+   and `agents/<name>/` (one agent's scratch). Nothing at the stack root.
+4. **Never state a result you did not measure.** Every number cites a run dir, a probe output file or a command.
+5. **Only the leaderboard decides.** A variant is better only if `editstack board` says so under the qualification
+   rules: complete seeds only, paired against its parent, then held-out before promotion.
+6. **RAM: every model process goes through editstack** (eval, `Stack.policy`), which takes a machine-wide slot
+   (`~/.config/editstack/machine.json`). Never load a model outside it.
+7. **Real hardware:** only when stack.json allows it, after promotion, with a written expected result. Sub-agents
+   never drive hardware.
+8. **Never delete or "clean up" what you did not create.** Stale runs are archived automatically.
+9. **Changed the sim, cameras or adapter?** Bump `harness_version` and old runs stop counting. **Changed only the success
+   definition?** Bump `metric_version` and run `editstack rescore` (no sim). Note why in ARCHITECTURE.md section 5.
+10. **Read any scorer before trusting it.** A past "scorer" only counted its own invocations.
 
 ---------------------------------------------------------------------------------------------------------------
 
 ## 1. Layout
 
 ```
-stack.json              task, metrics, qualification rules, RAM budget, harness_version, python interpreter
-AGENTS.md               this guide (CLAUDE.md points here)
-weights/original/       THE model as supplied (read-only)            weights/variants/<v>/  exported variants
-weights/best            symlink to the promoted variant (what deployment loads)
-model/INVENTORY.md      auto: every tensor, shape, dtype, stats, groups   (editstack decode)
-model/SCAN.md           auto: structural-defect hints (padding, untrained slices, dead/tied tensors)
-model/ARCHITECTURE.md   VERIFIED description of the forward pass, training loss, inference loop, deployment
-model/MODEL_MAP.md      what each part does (probe results, R^2, gains), append-only knowledge register
-model/CLAIMS.json       which neurons/channels each variant owns (auto from ctx.claim)
-env/adapter.py          load_policy / run_episode (/ episodes / capture): the ONLY sim/model glue
-eval/suites/*.json      fixed episode lists: screen, id, ood, heldout (roles: screen|selection|heldout)
-edits/<v>/edit.py       PARENT, OWNER, apply(W, ctx); data/ holds fitted arrays
-probes/                 shared probe scripts (run with `editstack run probes/x.py`)
-agents/<name>/          BRIEF.md (task), REPORT.md (results), scratch scripts and data of one agent
-runs/<v>/<suite>/s<k>/  eval results (results.jsonl, per-episode artifacts, DONE)
-board/                  LEADERBOARD.md, BEST_HISTORY.md
-docs/                   LESSONS.md (evidence), EDIT_COOKBOOK.md (recipes), HARNESS_AUDIT.md (phase-0 checklist)
+stack.json              task, metrics (+metric_version), qualification rules, harness_version, python, deploy_links
+AGENTS.md               this guide                          docs/        the knowledge base (index: docs/README.md)
+weights/original/       THE model as supplied (read-only)   weights/variants/<v>/  exports   weights/best -> promoted
+model/INVENTORY.md      auto: tensors, shapes, dtypes, stats, groups (editstack decode)
+model/SCAN.md           auto: structural-defect hints (padding, init-like slices, dead/tied tensors, I/O dims)
+model/ARCHITECTURE.md   VERIFIED forward pass, training loss + masks, inference loop, deployment, sim-vs-real
+model/MODEL_MAP.md      append-only register of measured facts about this model (with evidence paths)
+model/CLAIMS.json       units each variant owns (from ctx.claim; changing someone else's claimed slice is an error)
+env/adapter.py          load_policy / run_episode (+ episodes, capture, rescore): the only sim/model glue
+eval/suites/*.json      fixed episode lists; roles: screen | selection | heldout
+edits/<v>/edit.py       PARENT, OWNER, apply(W, ctx)          probes/   shared probes   agents/<name>/  per-agent
+runs/<v>/<suite>/s<k>/  results.jsonl, per-episode artifacts (trajectories, observations), DONE
+board/                  LEADERBOARD.md, BEST_HISTORY.md, knowledge patches
 ```
 
 ---------------------------------------------------------------------------------------------------------------
 
 ## 2. The workflow
 
-Each phase has a gate. Do not start a phase before the previous gate passes. Time boxes are for a model of
-~0.5-2 B params with an ~30-60 s sim episode; scale accordingly.
+The gates are what must be true before the next kind of ACTION, not before reading or thinking. Time boxes assume
+a ~0.5-2 B parameter model and a ~30-60 s sim episode.
 
-### Phase 0 - Harness audit (lead, <= 30-60 min, before ANY edit)
-The single biggest loss in past runs: ~2 days of tuning against sim cameras that did not match the real ones.
-Work through `docs/HARNESS_AUDIT.md`. Minimum:
-- `env/adapter.py` implemented; `editstack eval original --suite screen --episodes 0-1` runs end to end.
-- Sim matches deployment: cameras (pose, FOV, resolution, which stream), calibration, control rate, chunk
-  execution, normalisation stats, prompt/task string. Write each check into ARCHITECTURE.md section 5.
-- **Success definition agreed with the user and written in stack.json** (it changed twice mid-project last
-  time). Use STAGED metrics (e.g. reach / pick / ...) plus an outcome code per failure type (short, long, wide,
-  no-attempt...), so separate agents can own separate stages.
-- Suites fixed: `screen` (8-12 eps, fast), `id` (in-distribution), `ood` (the generalisation target),
-  `heldout` (never used for choosing; run only before promotion). Seeds only change policy noise; placements
-  are fixed so comparisons are PAIRED.
-- Baseline measured: `original` on id (2 seeds) and ood (3 seeds). Determinism check: same (variant, seed,
-  episode) twice gives the same result.
-**Gate:** baseline on the board, harness_version set, audit checklist complete.
+### Phase 0: Harness (lead, about 30-60 min of attention; the sim time runs in the background)
+- Make the adapter run: `editstack eval original --suite screen --episodes 0-1`.
+- **Ask the user now** for one real frame per camera and the deployment details (control rate, chunk execution,
+  calibration), then compare them with the sim. A camera mismatch found on day 4 forced a whole camera-transfer
+  stage. Work through `docs/HARNESS_AUDIT.md`.
+- Agree the success definition with the user. Use STAGED metrics (e.g. reach / pick) plus outcome codes, so effects
+  are visible per stage. A first wave once looked useless only because it was scored on PICK alone.
+- Fix the suites: `screen` (smoke only), `id`, `ood` (the target), and `heldout` (never used for choosing).
+- **Start the baselines detached now** (`original` on id with 2 seeds and ood with 3 seeds, `--detach`). Don't wait
+  for them; go to Phase 1.
+- **Gate (before the first EDIT is evaluated):** the adapter is deterministic (same seed and episode give the same
+  result); the sim matches deployment on the checked items; baselines are on the board.
 
-### Phase 1 - Decode and structural defects (lead alone, <= 1 h, no sub-agents)
-The best single win in past runs came here in 74 minutes (8/20 -> 19/20), while a 14-hour interpretability
-hunt at the head/neuron level stalled at 5/10.
-- `editstack decode`; read INVENTORY.md and SCAN.md.
-- Fill ARCHITECTURE.md sections 1-4 FROM THE CODE (model, training loss, inference loop). Look specifically for:
-  padded channels; loss masks (`loss[..., :k]`); inputs that are fed at inference but never supervised;
-  normalisation stats; sampling loop details (steps, what is fed back); chunk length and how many steps execute.
-- For each defect: an exact algebraic fix (section 3, family 1), verified offline, then one screen.
-**Gate:** ARCHITECTURE.md sections 1-4 filled with [verified] lines; structural fixes evaluated (kept or rejected
-with numbers).
+### Phase 1: Structure first (lead alone, <= 1 h, no sub-agents)
+- Run `editstack decode`, then read SCAN.md. Read the model, training and inference code, in the order given in
+  `ANALYSIS_GUIDE.md` step 1. With numbers only, follow `NUMBERS_ONLY_EDITING.md`.
+- Hunt for structural defects: padded/unsupervised channels, loss masks, train-vs-inference input mismatches,
+  normalisation stats, the sampling loop, chunk execution.
+- Fix each defect with an exact strategy (S01-S03 in `docs/strategies/`), verify offline, then evaluate.
+- **Gate:** the facts your edits rely on are in ARCHITECTURE.md marked [verified]; you don't need to fill
+  everything.
 
-### Phase 2 - Probe: locate the failure (<= 1-2 h)
-Before editing behaviour, find WHERE it goes wrong. Cheapest first:
-- **Offline single-chunk probes** (seconds each): feed recorded observations (captured during evals) through
-  the model, vary one input, measure the output. Use `st.policy(...)` and `adapter.capture` if present.
-- **Linear decodability** (`fit.cv_r2`, grouped by episode/placement): is the task variable (e.g. object
-  position) linearly present at each layer? Past model: R^2 0.87-0.99 everywhere => perception was fine, the
-  read-out was the problem. That one fact redirected all later work to the action side.
-- **Gains** (`fit.gain`): per decision step, how much does the output move per unit of the error it should
-  correct? Past model: 0.03-0.6 where ~1 was needed (wrist roll 0.03!).
-- **Failure taxonomy** from the staged metrics: what fraction of failures are each outcome code? (Past: 49 of 69
-  reached-but-not-picked were wrist roll > 25 deg off: one focused fix.)
-Record every finding in MODEL_MAP.md (what, where, number, evidence path).
-**Gate:** a written causal hypothesis with a number attached ("the policy under-corrects pan by 0.4x beyond
-|x|>7 cm; per-chunk gain 0.34").
+### Phase 2: Locate the failure (<= 1-2 h; offline probes, seconds each)
+- Use `ANALYSIS_GUIDE.md` steps 2-3: failure taxonomy from outcome codes, signed errors vs the task variable,
+  single-chunk probes on saved observations (`adapter.capture`), linear decodability (`fit.cv_r2`, grouped),
+  gains (`fit.gain`), source attribution, path ablation.
+- **Gate:** a causal sentence with a number ("pan gain 0.34 beyond |x| > 7 cm; front camera alone aims the first
+  move"), plus a predicted effect of the fix.
 
-### Phase 3 - Edit (exactness ladder: always use the highest rung that works)
-1. **Exact algebra** (`editstack.ops`): disconnect never-trained inputs (`zero_cols`); exact translations/scalings
-   of an input/output axis with compensating biases (`compensate_input_shift`, `rescale_channel`); fold a linear
-   map into a layer (`fold_input_map`, e.g. mapping new-camera features back to training-camera features).
-   Prove exactness offline: the function-preserving half of the edit must reproduce the original outputs to
-   float tolerance before you add the behaviour-changing half.
-2. **Closed-form fits** (`editstack.fit`): capture activations X during real rollouts, define the target Y the
-   layer *should* produce, solve `fit_delta(X, Y, W, b, lam, rank=1..4)`, save to `edits/<v>/data/`.
-   Low rank, grouped CV, and a held-out check of the fit's R^2 before any sim.
-3. **Gated circuits** in spare units (`ops.free_units`, `ops.exact_product_pair`, `ctx.claim`): add a new
-   mechanism whose output is exactly zero in situations the model already handles (e.g. multiply by
-   "planned - current state", which is 0 while holding still; or gate on the out-of-distribution feature).
-   This is how generalisation was added without in-distribution cost. Claim every unit.
-Never: random search over scales, edits you cannot explain, changing shapes, touching weights/original.
-Every edit.py docstring states: hypothesis, evidence path, expected effect (number), exactness argument.
-`editstack apply <v>` must show only the tensors you meant to change, with the rank you expect.
+### Phase 3: Edit (choose from the strategy library)
+- Open `docs/strategies/INDEX.md` and follow its selection flow from your symptom. Prefer the highest rung that
+  works: **exact algebra > closed-form fit > gated circuit**. Read the "failed" strategies (S17-S24) before trying
+  anything that resembles them.
+- Each edit.py docstring states: hypothesis, evidence path, expected effect (a number), and an exactness argument.
+- `editstack apply <v>` must show only the intended tensors, at the rank you expect, with your claims.
 
-### Phase 4 - Evaluation ladder (stop at the first rung that fails)
-| rung | what | cost (past model) | pass criterion |
-|---|---|---|---|
-| a | `editstack apply <v>` diff + offline probe on recorded obs | seconds | expected tensors/rank; target output moves by the predicted amount |
-| b | `--suite screen --seeds 0` | ~10 min | no regression on screen, outcome codes move the predicted way |
-| c | qualify: `ood` 3 seeds + `id` 2 seeds | 1-2 h | stack.json rules; paired vs parent (board shows wins/losses + sign-test p) |
-| d | `heldout` 1 seed | ~20 min | within ~15 pp of selection suites (else overfit) |
-| e | real hardware (only if allowed) | user time | the expected result you wrote down beforehand |
-Run long evals with `--detach`, then `editstack wait <v> --suite <s>` (one blocking call, no sleep loops).
-Two seeds misled twice before (23/24 -> 31/36 at seed 3). Never draw conclusions from a screen.
+### Phase 4: Evaluation ladder (stop at the first rung that fails)
+| rung | what | pass criterion |
+|---|---|---|
+| a | `editstack apply` diff + offline probe on saved observations | the expected tensors and rank; the target output moves by the predicted amount |
+| b | target suite, seed 0 (`--detach`, then `editstack wait`) | **paired early stop**: the board's "vs parent" must not show more losses than wins. If it does, stop and record it |
+| c | qualify: target suite 3 seeds + id 2 seeds | stack.json rules (complete seeds only); paired vs parent |
+| d | `heldout`, 1 complete seed | gap to the selection rate <= `max_heldout_gap`; promotion is blocked otherwise |
+| e | real hardware (only if allowed) | the expected result you wrote down beforehand |
+- `screen` is only a smoke test. 8 episodes cannot show a regression.
+- Two-seed results misled three times. Never promote on fewer than the rules require.
 
-### Phase 5 - Compose and promote (one owner: the lead)
-- Variants form ONE chain via PARENT: each new edit builds on the current best (`edits/<v>/edit.py PARENT=...`).
-- After adding each link, re-run rung c; interference appears when two edits correct the same quantity.
-- `editstack promote` (requires held-out results) exports, verifies bit-exactness, re-points weights/best and
-  logs to board/BEST_HISTORY.md.
+### Phase 5: Compose and promote (one owner: the lead)
+- Keep one chain via PARENT. Before adding a link, ask: does an earlier link already correct this quantity?
+  Double correction was the main source of interference. Re-qualify after every link.
+- `editstack ablate <v> --suite <target> --seeds 0,1,2` (leave-one-out) before promoting. In one past project,
+  pad-zero plus one servo got the whole gain; four later circuits added nothing. Drop links that don't pay.
+- `editstack promote` exports with bit-exact verification, re-points `weights/best` and any `deploy_links`, and
+  logs the change to board/BEST_HISTORY.md.
+
+### Phase 6: Record and evolve the knowledge (every agent, every experiment, a few seconds)
+- After EVERY experiment, positive or negative:
+  `editstack learn "<what happened, with numbers>" --outcome win|loss|neutral|mixed|info --evidence <run dir> --strategy Sxx`.
+  This appends to `docs/LEARNINGS.md` and to that strategy's evidence log.
+- When the evidence changes a strategy's status (e.g. untested → partial → proven, or proven → failed on this model
+  class), edit the `Status:` line following `docs/strategies/HOW_TO_UPDATE.md`. A new technique gets the next
+  free S-number.
+- Facts about THIS model go to `model/MODEL_MAP.md`. Lessons about editing IN GENERAL go to LEARNINGS.md, and then
+  into the guide they change.
+- `editstack docs contribute` writes a patch of these improvements for the central editstack repo. Opening a PR
+  publishes it, so ask the user first. `editstack docs sync` pulls improved guides into this stack and never
+  overwrites your local edits.
 
 ---------------------------------------------------------------------------------------------------------------
 
-## 3. Multi-agent orchestration
+## 3. Multi-agent work (full guide: docs/AGENT_FLEET.md)
 
-**What worked:** sub-agents that OWN ONE BENCHMARK STAGE with a numeric target, a fixed suite, an owned folder
-and a process budget (approach owned "reach", grasp owned "grip", camfix owned "pass every suite under measured
-cameras") produced every best variant. **What did not:** "test this theory" briefs (all three first-wave agents
-ended with "keep the baseline"), diagnose-only swarms (27 small read-only agents: 0 accepted candidates), two
-agents on one hypothesis, and maintenance agents.
+- **Phases 0-2: one agent** holding the whole context. Delegate from Phase 3 once there is a causal sentence.
+- **Split by measurable quantity:** a stage (reach / grip / cameras) or a mechanism. Every agent gets a staged metric
+  that can SEE its effect, a numeric target, a fixed suite and its own folder. Never give two agents the same
+  quantity.
+- **How many:** `N = floor(min(P_ram, P_sat) / 2)` research agents at 2 processes each. That is 2 on a 60 GB machine
+  with ~9 GB processes, 3 at most. Agents idled 25-86% waiting for sims; more agents only lengthen the queue.
+- **Tiers:**
 
-Rules:
-- **Phase 0-2 are the lead's job, alone.** Delegate only from Phase 3 on, once the hypothesis has a number.
-- **Number of research agents <= RAM budget / (2 x per_process_gb)**, each with <= 2 model processes
-  (60 GB / 8 GB -> 3 agents). More agents only lengthen the queue; past agents idled 60-85% waiting for sims.
-- **Create each agent with `editstack agent new <name> --stage ... --target ...`** and delegate with
-  "Read agents/<name>/BRIEF.md and AGENTS.md, then do it." The brief is the only context it gets.
-- **Never give two agents the same hypothesis or the same stage.** Check agents/*/BRIEF.md first.
-- **Agents register their own variants** (they appear on the board automatically) and append facts to
-  MODEL_MAP.md; the lead merges chains and promotes.
-- **The lead does not poll.** Use `editstack wait` / completion notifications, and `editstack status` for a
-  one-shot digest. Polling and re-running agents' evals bloated the lead's context to ~780k tokens before.
-- **Rendering, videos, GIFs, write-ups and maps go to a separate doc agent** (cheap, high value per minute);
-  the lead never spends context on them.
-- **No side projects in the same RAM pool** while research agents run (a parallel training project cut eval
-  throughput from ~250 to ~60 episodes/h).
-- Agents survive network drops: runs are resumable (rerun the same eval command; finished episodes are kept).
-  Tell a resumed agent "resume, don't relaunch".
-
----------------------------------------------------------------------------------------------------------------
+  | role | tier |
+  |---|---|
+  | lead, stage owners, reviewers | frontier |
+  | doc / render | mid |
+  | jobs a checker can verify mechanically | fast tier is fine |
+  | interpreting or designing | never the fast tier |
+- **Brief** with `editstack agent new`, plus the causal sentence, what was already tried, and the default for each
+  choice. Agents state defaults and proceed; the lead never waits on a go-ahead either.
+- **The lead does not poll.** Use completion notices, `editstack wait` and `editstack status`. Rendering, videos
+  and write-ups go to a separate doc agent.
+- **Independent review** before promoting or publishing numbers: a fresh agent given the code and the evidence, not
+  your conclusions.
 
 ## 4. Commands
 
 ```
-editstack status                         one-shot digest (running evals, RAM, board top, best)
-editstack decode | verify                inventory + scan of the original | check it is untouched
-editstack edit new <v> --parent <p> --owner <me> --desc "..."
-editstack apply <v>                      in-memory apply + diff (tensors, values changed, rank, claims)
+editstack status                                   digest: running evals, RAM, board top, best
+editstack decode | verify                          inventory + scan | full integrity check of the original
+editstack edit new <v> --parent <p> --owner <me>   then: editstack apply <v>   (diff, rank, claims; registers nothing)
 editstack eval <v> --suite <s> --seeds 0,1,2 --jobs 2 [--episodes 0-5] [--detach]
-editstack wait <v> --suite <s>           block until DONE; prints per-seed counts
-editstack board | promote [--dry-run]    leaderboard (writes board/LEADERBOARD.md) | update weights/best
-editstack export <v>                     weights/variants/<v> in the original format, verified bit-exact
-editstack agent new <name> --stage <s> --target "<numbers>"   brief for a stage-owner sub-agent
-editstack claims | slots                 neuron/channel ownership | machine-wide RAM reservations
-editstack run probes/x.py [args]         run a probe under the stack's python with the stack importable
+editstack wait <v> --suite <s>                     blocks until that job ends; prints per-seed results
+editstack board | ablate <v> --suite <s> | promote [--dry-run]
+editstack rescore [<v>]                            recompute metrics from stored trajectories after metric_version++
+editstack export <v>                               weights/variants/<v>, original format, verified bit-exact
+editstack agent new <name> --stage <s> --target "<numbers>"
+editstack learn "<text>" --outcome win|loss|... --evidence <path> [--strategy Sxx]
+editstack docs sync | contribute | index           evolve the knowledge base
+editstack claims | slots | run probes/x.py
 ```
-Python: `from editstack import Stack, ops, fit; st = Stack.find(); a = st.weights("v"); pol = st.policy("v")`.
+Python: `from editstack import Stack, ops, fit`. Then `st = Stack.find()`; `a = st.weights("v")`; `pol = st.policy("v")`;
+`st.adapter().capture(pol, obs, names)`.
 
----------------------------------------------------------------------------------------------------------------
+## 5. Anti-patterns (each cost hours before; evidence in LESSONS.md and strategies S17-S24)
 
-## 5. Anti-patterns (each cost hours before)
-
-- Editing before the harness audit (wrong cameras: ~2 days lost; a stale code copy: undetected for days).
-- Interpretability hunts at head/neuron level before checking structural defects and read-out gains.
-- Re-planning / horizon / ensembling tweaks as a substitute for fixing the policy (made results worse; reverted).
-- Editing during training (training cancels edits; edit the finished checkpoint once).
-- Promoting on 2 seeds; selecting dozens of variants on the same placements without a held-out suite.
-- Changing the success definition mid-way without bumping harness_version (numbers silently mix).
-- `sleep` polling loops; agents waiting for a go-ahead that nobody will give (state the default and proceed).
-- Two edits correcting the same quantity (double correction), or sharing a neuron (use claims).
-- Large unexplained edits ("214 M values changed to hard-code a controller" was rejected by the user).
-
-## 6. Writing things down
-
-- `model/MODEL_MAP.md`: append facts as `- [date][agent] <fact with number> (evidence: <path>)`.
-  Include negative results; they prevent repeats.
-- `agents/<name>/REPORT.md`: update as you go (a crash must not lose the result). First line = the result.
-- `model/ARCHITECTURE.md`: only verified statements; mark anything else [unverified].
-- Edit docstrings: hypothesis, evidence, expected effect, exactness argument.
+- Editing before the harness check, especially cameras. Ask for real frames on day 1.
+- Starting with head/neuron interpretability before structural defects and read-out gains.
+- Re-plan/horizon tweaks instead of fixing the policy. Editing during training. Global output gains. Naive bias
+  nudges. Hard-coding a controller.
+- Promoting on 2 seeds. Choosing among dozens of variants on the same placements without a held-out suite.
+- Scoring agents on a metric that can't see their effect.
+- Two agents on one quantity. Two edits correcting the same quantity. Shared neurons (CLAIMS.json catches these).
+- Polling with sleep loops. Waiting for a go-ahead. Side projects in the same RAM pool.
+- Unexplained edits ("214 M values changed to hard-code a controller" was rejected by the user).

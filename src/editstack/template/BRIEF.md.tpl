@@ -13,13 +13,23 @@ Task of the model: {task}
 - **Process budget:** at most {procs} concurrent model processes (`--jobs {procs}` total across your evals)
 - **Your folder:** `agents/{name}/` (scripts, data, REPORT.md). Your variants: `edits/{name}_*`.
 
-## Rules (short version; AGENTS.md is binding)
+## Context you must fill in before delegating (lead)
+- Causal sentence for this stage, with numbers and evidence paths:
+- Already tried (do not repeat; see MODEL_MAP.md negative results and docs/strategies evidence logs):
+- Candidate strategies from docs/strategies/INDEX.md:
+- Defaults to take without asking:
+
+## Rules (short version; AGENTS.md and docs/AGENT_FLEET.md are binding)
+- Your metric must be able to SEE your effect (a staged metric for your stage). If it can't, say so first.
 - Edits only as `edits/<variant>/edit.py` (+ data/). Claim every unit you take over (ctx.claim).
-- Evidence ladder: apply diff + offline probe -> screen -> qualify -> (lead runs heldout).
+- Evidence ladder: apply diff + offline probe -> target suite seed 0 + paired early stop -> qualify -> (lead runs heldout).
+  `screen` is a smoke test only.
 - Long evals: `--detach` then `editstack wait`. No sleep loops. Resume interrupted evals by re-running the same command.
 - Do not touch other agents' folders, edits or runs. Do not change env/, eval/suites/ or stack.json - ask the lead.
 - Do not wait for a go-ahead: state your default choice in REPORT.md and proceed.
+- Evaluate in this order: seed 0 on the target suite, then the paired early stop (board "vs parent"), then qualify.
 - Update REPORT.md as you go; append facts (with numbers and evidence paths) to model/MODEL_MAP.md.
+- After every experiment: `editstack learn "<result with numbers>" --outcome ... --evidence ... --strategy Sxx`.
 
 ## Done when
 The target is met on the qualification suites (board says qualified, paired vs parent not worse), OR you have a

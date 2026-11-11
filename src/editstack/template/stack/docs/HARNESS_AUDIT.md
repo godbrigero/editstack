@@ -11,7 +11,9 @@ model/ARCHITECTURE.md section 5. Bump `harness_version` in stack.json whenever a
 - [ ] Inference loop identical (sampling steps, noise, chunk length, how many steps execute before re-planning).
 
 ## Simulation vs deployment
-- [ ] Cameras: pose, FOV, resolution, which stream (e.g. RGB not IR), mounting, measured on the real rig.
+- [ ] Cameras: pose, FOV, resolution, which stream (e.g. RGB not IR), mounting, measured on the real rig. ASK THE
+      USER ON DAY 1 for one real frame per camera, and compare it side by side with the sim render of the same scene.
+      (A mismatch found on day 4 collapsed the best variant to 6/40 and forced a camera-transfer stage.)
 - [ ] Calibration of joints/units, control rate, latency.
 - [ ] Scene: object size/colour/mass, table height, lighting, shadows (the real world may have none).
 - [ ] The sim code being run is the CURRENT one (not a stale copy). Record its path and version/commit.
