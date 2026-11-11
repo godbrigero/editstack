@@ -35,7 +35,7 @@ model-loading commands re-run themselves under that interpreter automatically.
 
 ```bash
 editstack new ~/stacks/my-model --weights /path/to/checkpoint --task "what it does and what to change" \
-    [--python /path/to/sim/venv/bin/python] [--preset examples/<family>] [--link]
+    [--python /path/to/sim/venv/bin/python] [--preset <name|folder>] [--link]
 cd ~/stacks/my-model
 ```
 Then tell your agent: **"Read AGENTS.md and work through it for this stack."**
@@ -76,10 +76,10 @@ Python: `from editstack import Stack, ops, fit` (`ops`: exact algebra, low-rank 
 | detach + wait + resumable evals | agents polled with sleep loops; network drops killed turns |
 | stage-owner briefs (`agent new`) | stage owners produced every best variant; hypothesis-only agents and diagnose-only swarms did not |
 
-## Examples
+## Presets (`editstack presets`)
 
-- `examples/toy`: a numpy "policy" with untrained padded inputs. It covers the full lifecycle in seconds and is used by the tests.
-- `examples/smolvla-so101`: a preset for SmolVLA (LeRobot) on the SO-101 MuJoCo yellow-cube scene. It has the measured-camera
+- `toy`: a numpy "policy" with untrained padded inputs. It covers the full lifecycle in seconds and is used by the tests.
+- `smolvla-so101`: a preset for SmolVLA (LeRobot) on the SO-101 MuJoCo yellow-cube scene. It has the measured-camera
   adapter, the original suites (it reproduces the old runs bit-for-bit), and the proven edit chain `pad0 -> deep8 -> pan17`.
 
 ## Tests

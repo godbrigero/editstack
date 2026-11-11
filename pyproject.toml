@@ -23,7 +23,7 @@ editstack = "editstack.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-editstack = ["template/**/*", "template/**/.*", "template/.*"]
+editstack = ["template/**/*", "template/**/.*", "template/.*", "presets/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

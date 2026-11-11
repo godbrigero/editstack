@@ -11,6 +11,21 @@ from pathlib import Path
 from typing import Optional
 
 TEMPLATE = Path(__file__).parent / "template"
+PRESETS = Path(__file__).parent / "presets"
+
+
+def list_presets():
+    return sorted(p.name for p in PRESETS.iterdir() if p.is_dir() and not p.name.startswith("_"))
+
+
+def resolve_preset(preset) -> Path:
+    """A preset is a bundled name (editstack new --preset smolvla-so101) or a folder path."""
+    p = Path(preset).expanduser()
+    if p.is_dir():
+        return p.resolve()
+    if (PRESETS / str(preset)).is_dir():
+        return (PRESETS / str(preset)).resolve()
+    raise SystemExit(f"unknown preset {preset!r}; bundled: {list_presets()} (or pass a folder)")
 
 
 def _copy_tree(src: Path, dst: Path) -> None:
@@ -38,7 +53,7 @@ def new_stack(dest: Path, weights: Optional[Path], name: str = "", task: str = "
     cfg = json.loads(json.dumps(DEFAULT_CONFIG))
     cfg.update(name=name or dest.name, task=task, created=time.strftime("%Y-%m-%d %H:%M"), python=python)
     if preset:
-        preset = Path(preset).expanduser().resolve()
+        preset = resolve_preset(preset)
         from .stack import _merge
         if (preset / "stack.json").exists():
             cfg = _merge(cfg, json.loads((preset / "stack.json").read_text()))

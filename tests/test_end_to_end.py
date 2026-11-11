@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-TOY = ROOT / "examples" / "toy"
+TOY = ROOT / "src" / "editstack" / "presets" / "toy"
 
 
 def cli(*args, cwd, check=True):
@@ -29,7 +29,7 @@ def stack(tmp_path, monkeypatch):
     st = tmp_path / "stack"
     env = dict(os.environ, PYTHONPATH=str(ROOT / "src"), HOME=str(tmp_path / "home"))
     subprocess.run([sys.executable, "-m", "editstack", "new", str(st), "--weights", str(w), "--task", "reach target",
-                    "--preset", str(TOY)], check=True, env=env, capture_output=True)
+                    "--preset", "toy"], check=True, env=env, capture_output=True)
     assert not (st / "make_model.py").exists()                  # presets copy folders only
     os.environ["HOME"] = str(tmp_path / "home")
     return st

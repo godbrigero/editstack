@@ -3,7 +3,7 @@
     editstack new ~/stacks/smolvla-so101 \
         --weights ~/Documents/smolvla-weight-edit-6000/ckpt_base --link \
         --python ~/Documents/sentinel-drone-arm-project/.venv/bin/python \
-        --preset /path/to/editstack/examples/smolvla-so101 \
+        --preset smolvla-so101 \
         --task "Generalise yellow-cube picking to cubes 2-6 cm outside the trained band"
 
 Gives: the sim adapter (port of evalpick.py + bench.py), suites id/near/heldout/screen with the original

@@ -52,7 +52,7 @@ def main(argv=None) -> None:
     a.add_argument("--link", action="store_true", help="symlink weight files instead of copying")
     a.add_argument("--python", help="interpreter that has the model/sim dependencies (eval runs under it)")
     a.add_argument("--no-decode", action="store_true")
-    a.add_argument("--preset", help="folder with model-family files (env/, eval/suites/, edits/, model/, stack.json overrides)")
+    a.add_argument("--preset", help="bundled preset name (see `editstack presets`) or a folder with env/, eval/suites/, edits/, model/, stack.json")
 
     a = sub.add_parser("add-weights", help="put weights into weights/original of the current stack (write-once)")
     a.add_argument("path")
@@ -113,6 +113,7 @@ def main(argv=None) -> None:
     sub.add_parser("slots", help="machine-wide RAM reservations")
     sub.add_parser("claims", help="list claimed neurons/channels")
     sub.add_parser("guide", help="print the path of the agent guide (AGENTS.md)")
+    sub.add_parser("presets", help="list bundled model-family presets")
 
     a = sub.add_parser("run", help="run a python script with the stack on sys.path under the stack's python")
     a.add_argument("script")
@@ -143,6 +144,13 @@ def _dispatch(args, argv) -> None:
         if not args.weights:
             print("next: editstack add-weights /path/to/model && editstack decode")
         print("next: read AGENTS.md (Phase 0) - fill env/adapter.py, eval/suites/, model/ARCHITECTURE.md")
+        return
+    if cmd == "presets":
+        from .scaffold import list_presets, PRESETS
+        for n in list_presets():
+            readme = PRESETS / n / "README.md"
+            first = readme.read_text().splitlines()[0].lstrip("# ") if readme.exists() else ""
+            print(f"{n:16s} {first}")
         return
     st = _stack()
     if cmd == "add-weights":
