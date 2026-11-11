@@ -1,5 +1,9 @@
 # Agent guide: editing this model's weights
 
+> **The evidence in these guides comes from a PAST reference project** (a SmolVLA policy on an SO-101 arm, Nov 2026).
+> Its numbers, placements, tensor names and neuron indices describe THAT model, not the one in this stack. Use them
+> as lessons about method only. Facts about YOUR model come only from `model/` and your own runs in `runs/`.
+
 You are editing the weights of ONE model (this stack) by hand: no gradient training and no new data, unless the user
 explicitly says otherwise. This guide and `docs/` distil ~5 days and ~85 agent sessions of hand-editing a SmolVLA
 robot policy, corrected by an independent evidence audit. Every rule has evidence in `docs/LESSONS.md`. The

@@ -1,13 +1,16 @@
 # Strategy library: index and selection guide
 
+> **The evidence in these guides comes from a PAST reference project** (a SmolVLA policy on an SO-101 arm, Nov 2026).
+> Its numbers, placements, tensor names and neuron indices describe THAT model, not the one in this stack. Use them
+> as lessons about method only. Facts about YOUR model come only from `model/` and your own runs in `runs/`.
+
 Use this after ANALYSIS_GUIDE.md has given you a measured symptom. Each strategy file has the full procedure, math,
 numbers and evidence. Recipes for the primitive ops are in EDIT_COOKBOOK.md; the evidence narrative is in LESSONS.md; how to
 edit without a sim is in NUMBERS_ONLY_EDITING.md; how to split work across agents is in AGENT_FLEET.md.
 Update a file after every run that touches it: HOW_TO_UPDATE.md (`editstack learn --strategy Sxx`).
 
-**Where the code is.** `OLD/...` references are provenance. In a stack, use `editstack.ops` / `editstack.fit`; the
-SmolVLA preset ships the exact flow-matching algebra as `env/smolvla_algebra.py` (pad_zero, translate_actions,
-scale_axis) and the original circuit/camera functions as `env/legacy/` (gpg, grs, cf; run via `env/legacy_bridge.py`).
+**Where the code is.** `OLD/...` references are provenance. In a stack, use `editstack.ops` / `editstack.fit` and any exact
+helpers your stack keeps in `env/`.
 
 Status: **proven** = repeated closed-loop gain beyond noise or an exactness proof plus a gain; **partial** = mechanism
 verified but the score gain is within noise or base-dependent; **failed** = tried and worse/null (anti-strategy);

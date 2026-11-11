@@ -28,7 +28,7 @@ This installs [uv](https://astral.sh/uv) if it's missing, then the `editstack` C
 one go:
 ```bash
 curl -LsSf https://raw.githubusercontent.com/godbrigero/editstack/main/install.sh | sh -s -- \
-    ~/stacks/my-model --weights /path/to/model --task "what to change" [--preset smolvla-so101] [--python /venv/bin/python]
+    ~/stacks/my-model --weights /path/to/model --task "what to change" [--preset <name|folder>] [--python /venv/bin/python]
 ```
 Alternatives: `uv tool install git+https://github.com/godbrigero/editstack`, or `pipx install git+...`. To put it
 into the environment that runs your sim: `uv pip install --python /path/to/venv/bin/python git+https://github.com/godbrigero/editstack`.
@@ -86,8 +86,7 @@ Python: `from editstack import Stack, ops, fit` (`ops`: exact algebra, low-rank 
 ## Presets (`editstack presets`)
 
 - `toy`: a numpy "policy" with untrained padded inputs. It covers the full lifecycle in seconds and is used by the tests.
-- `smolvla-so101`: a preset for SmolVLA (LeRobot) on the SO-101 MuJoCo yellow-cube scene. It has the measured-camera
-  adapter, the original suites (it reproduces the old runs bit-for-bit), and the proven edit chain `pad0 -> deep8 -> pan17`.
+- Your own: any folder with `env/`, `eval/suites/`, `edits/`, `model/` and a partial `stack.json` (`--preset ./my-preset`).
 
 ## Tests
 

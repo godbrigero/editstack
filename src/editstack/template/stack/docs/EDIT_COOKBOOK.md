@@ -1,5 +1,9 @@
 # Edit cookbook
 
+> **The evidence in these guides comes from a PAST reference project** (a SmolVLA policy on an SO-101 arm, Nov 2026).
+> Its numbers, placements, tensor names and neuron indices describe THAT model, not the one in this stack. Use them
+> as lessons about method only. Facts about YOUR model come only from `model/` and your own runs in `runs/`.
+
 Convention: linear layer `y = x W^T + b`, `W` is `[out, in]`. All ops in `editstack.ops`, fits in `editstack.fit`.
 
 ## A. Exact algebra (preferred)

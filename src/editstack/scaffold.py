@@ -19,7 +19,7 @@ def list_presets():
 
 
 def resolve_preset(preset) -> Path:
-    """A preset is a bundled name (editstack new --preset smolvla-so101) or a folder path. A bare name always means
+    """A preset is a bundled name (editstack new --preset toy) or a folder path. A bare name always means
     the bundled preset (a same-named folder in the current directory does not shadow it); use ./name for a folder."""
     name = str(preset)
     if "/" not in name and not name.startswith(".") and (PRESETS / name).is_dir():

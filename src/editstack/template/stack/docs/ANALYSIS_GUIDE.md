@@ -1,5 +1,9 @@
 # Analysis guide: how to understand a model well enough to edit it
 
+> **The evidence in these guides comes from a PAST reference project** (a SmolVLA policy on an SO-101 arm, Nov 2026).
+> Its numbers, placements, tensor names and neuron indices describe THAT model, not the one in this stack. Use them
+> as lessons about method only. Facts about YOUR model come only from `model/` and your own runs in `runs/`.
+
 Goal of analysis: turn "the model fails at X" into **"quantity Q is wrong by N at place P, because of mechanism M"**.
 Only that sentence licenses an edit. Every probe below answers one piece of it, cheaply, with a number.
 

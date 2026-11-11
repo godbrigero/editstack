@@ -1,5 +1,9 @@
 # Agent fleet: who to start, on which model, with what brief
 
+> **The evidence in these guides comes from a PAST reference project** (a SmolVLA policy on an SO-101 arm, Nov 2026).
+> Its numbers, placements, tensor names and neuron indices describe THAT model, not the one in this stack. Use them
+> as lessons about method only. Facts about YOUR model come only from `model/` and your own runs in `runs/`.
+
 Read this if you are the lead and are about to start, brief, wait on, resume or stop another agent. `../AGENTS.md` §3
 is the short version. The roster table below is the quick reference; the rest of this file is the reasons, the numbers,
 the brief templates (§7) and the procedure. Evidence: about 85 Claude sessions and one Codex thread from the SmolVLA SO-101 project (Nov 5–10 2026).

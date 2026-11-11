@@ -1,5 +1,9 @@
 # Lessons: the evidence behind the guides (single source of numbers)
 
+> **The evidence in these guides comes from a PAST reference project** (a SmolVLA policy on an SO-101 arm, Nov 2026).
+> Its numbers, placements, tensor names and neuron indices describe THAT model, not the one in this stack. Use them
+> as lessons about method only. Facts about YOUR model come only from `model/` and your own runs in `runs/`.
+
 Source: the SmolVLA SO-101 yellow-cube project (Nov 2026): ~85 agent sessions (editing + hybrid projects), ~4,300 sim episodes, an
 independent evidence audit, and three evidence-based guide writers. Other guides cite this file; when a number
 changes, change it HERE. Corrections from the audit are marked **[corrected]**.

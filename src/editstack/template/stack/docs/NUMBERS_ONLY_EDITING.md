@@ -1,5 +1,9 @@
 # Editing a model by its numbers alone
 
+> **The evidence in these guides comes from a PAST reference project** (a SmolVLA policy on an SO-101 arm, Nov 2026).
+> Its numbers, placements, tensor names and neuron indices describe THAT model, not the one in this stack. Use them
+> as lessons about method only. Facts about YOUR model come only from `model/` and your own runs in `runs/`.
+
 Read this when the brief is "here are the weights (text dumps, anonymous tensors L1..Ln) and maybe a short
 structural note. Fix behaviour X. No backprop." You may get no model code, no names and no training script.
 The job is the same as usual: turn "it fails at X" into "quantity Q is wrong by N at place P because of mechanism
