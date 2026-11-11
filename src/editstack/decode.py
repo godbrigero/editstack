@@ -215,8 +215,7 @@ def decode(stack, write: bool = True) -> dict:
     (md / "inventory.json").write_text(json.dumps(inv, indent=1) + "\n")
     (md / "INVENTORY.md").write_text(_inventory_md(inv, groups, ck))
     (md / "SCAN.md").write_text(_scan_md(hints))
-    hashes = {p.name: formats.sha256_file(p) for p in ck.weight_files}
-    (md / "ORIGINAL.sha256.json").write_text(json.dumps(hashes, indent=1) + "\n")
+    record_original(stack)
     arch = md / "ARCHITECTURE.md"
     if not arch.exists() or "AUTO-FACTS" in arch.read_text()[:400]:
         arch.write_text(_arch_md(stack, inv, groups))
@@ -341,3 +340,75 @@ sim and real (cameras, calibration, latency, lighting, shadows).
 Algebraic facts usable for exact edits (e.g. 'action space translation = bias shifts in in_proj/out_proj plus
 time-feature term', 'pan output x k and pan input / k leaves holding unchanged'). Each with its equivalence test.
 """
+
+
+# ----------------------------------------------------------------------------------------------- original integrity
+
+
+def _file_rec(p: Path, with_hash: bool = True) -> dict:
+    st = p.stat()          # follows symlinks: --link stacks are checked against the real files
+    r = {"size": st.st_size, "mtime_ns": st.st_mtime_ns}
+    if with_hash:
+        r["sha256"] = formats.sha256_file(p)
+    return r
+
+
+def original_files(stack) -> List[Path]:
+    return sorted(p for p in stack.original_dir.iterdir() if p.is_file() and not p.name.startswith("."))
+
+
+def record_original(stack) -> None:
+    """Write model/ORIGINAL.sha256.json ONCE (all files: weights, configs, normalisers). If it exists, verify instead:
+    the reference is never silently rewritten."""
+    ref = stack.model_dir / "ORIGINAL.sha256.json"
+    if ref.exists():
+        verify(stack)
+        return
+    recs = {p.name: _file_rec(p) for p in original_files(stack)}
+    ref.write_text(json.dumps(recs, indent=1) + "\n")
+    linked = [p.name for p in original_files(stack) if p.is_symlink()]
+    if linked:
+        print(f"note: {len(linked)} original file(s) are symlinks; the targets stay writable outside this stack. "
+              f"Integrity is checked on every eval (editstack verify for a full hash check).")
+
+
+def _load_ref(stack) -> dict:
+    from .stack import StackError
+    ref = stack.model_dir / "ORIGINAL.sha256.json"
+    if not ref.exists():
+        raise StackError("no model/ORIGINAL.sha256.json - run `editstack decode` first")
+    d = json.loads(ref.read_text())
+    return {k: (v if isinstance(v, dict) else {"sha256": v}) for k, v in d.items()}
+
+
+def verify(stack, full: bool = True) -> List[str]:
+    """Raise StackError if any original file changed, appeared or disappeared."""
+    from .stack import StackError
+    raw = json.loads((stack.model_dir / "ORIGINAL.sha256.json").read_text()) if (stack.model_dir / "ORIGINAL.sha256.json").exists() else None
+    ref = _load_ref(stack)
+    now = {p.name: p for p in original_files(stack)}
+    if raw and any(isinstance(v, str) for v in raw.values()):          # legacy: weights only, hash only -> upgrade
+        bad = [n for n, v in raw.items() if n in now and formats.sha256_file(now[n]) != v]
+        if bad or any(n not in now for n in raw):
+            raise StackError(f"ORIGINAL WEIGHTS CHANGED: {bad or [n for n in raw if n not in now]}")
+        recs = {n: _file_rec(p) for n, p in now.items()}
+        (stack.model_dir / "ORIGINAL.sha256.json").write_text(json.dumps(recs, indent=1) + "\n")
+        print(f"upgraded model/ORIGINAL.sha256.json to cover all {len(recs)} original files")
+        return sorted(recs)
+    problems = [f"missing: {n}" for n in ref if n not in now] + [f"new file: {n}" for n in now if n not in ref]
+    for n, rec in ref.items():
+        if n not in now:
+            continue
+        cur = _file_rec(now[n], with_hash=False)
+        if not full and rec.get("size") == cur["size"] and rec.get("mtime_ns") == cur["mtime_ns"]:
+            continue
+        if rec.get("size") not in (None, cur["size"]) or formats.sha256_file(now[n]) != rec["sha256"]:
+            problems.append(f"changed: {n}")
+    if problems:
+        raise StackError("ORIGINAL WEIGHTS CHANGED - weights/original must never be modified:\n  " + "\n  ".join(problems))
+    return sorted(ref)
+
+
+def quick_verify(stack) -> None:
+    """Cheap check on every eval: size + mtime, full hash only for files that look touched."""
+    verify(stack, full=False)

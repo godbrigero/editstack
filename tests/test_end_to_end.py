@@ -59,8 +59,17 @@ def test_lifecycle(stack):
             f"PARENT='{parent}'\nOWNER='{name}'\n"
             "def apply(W, ctx):\n    W['head.weight'][:, 5] *= 1.0001\n    ctx.claim('head.weight', 1, [5], 'test')\n")
     cli("apply", "c1", cwd=stack)
+    assert json.loads((stack / "model" / "CLAIMS.json").read_text()) == []      # a dry apply registers nothing
+    cli("eval", "c1", "--suite", "screen", "--seeds", "0", "--episodes", "0", cwd=stack)   # eval registers c1's claims
     r = cli("apply", "c2", cwd=stack, check=False)
     assert r.returncode != 0 and "claim conflict" in (r.stderr + r.stdout)
+    # an UNCLAIMED change of a claimed slice is also a conflict (derived from the diff)
+    cli("edit", "new", "c3", "--parent", "pad0", cwd=stack)
+    (stack / "edits" / "c3" / "edit.py").write_text("PARENT='pad0'\ndef apply(W, ctx):\n    W['head.weight'][:, 5] += 1\n")
+    r = cli("apply", "c3", cwd=stack, check=False)
+    assert r.returncode != 0 and "without claiming" in (r.stderr + r.stdout)
+    for n in ("c1", "c2", "c3"):
+        shutil.rmtree(stack / "edits" / n)
 
     # eval baseline and pad0 (parallel workers), paired seeds
     for v in ("original", "pad0"):
@@ -138,3 +147,57 @@ def test_knowledge_loop(stack):
     p = Path(patch.split("wrote ")[1].split("\n")[0])
     body = p.read_text()
     assert "LOCAL RULE" in body and "S99-test.md" in body and "36/36" in body
+
+
+
+def test_reviewer_regressions(stack):
+    """Bugs found by the independent review, each reproduced on a toy stack before the fix."""
+    (stack / "env" / "helper.py").write_text("ZERO_FROM = 2\n")
+    cli("edit", "new", "pz", cwd=stack)
+    (stack / "edits" / "pz" / "edit.py").write_text(
+        "import helper\nfrom editstack import ops\nPARENT=None\n"
+        "def apply(W, ctx):\n    ops.zero_cols(W, 'enc.weight', slice(helper.ZERO_FROM, None))\n")
+    cli("eval", "pz", "--suite", "ood", "--seeds", "0", cwd=stack)
+    # 1. chain hash covers env helpers: changing the helper makes old runs stale
+    (stack / "env" / "helper.py").write_text("ZERO_FROM = 3\n")
+    assert "1 stale" in cli("board", cwd=stack).stdout
+    out = cli("eval", "pz", "--suite", "ood", "--seeds", "0", cwd=stack).stdout
+    assert "archived stale" in out and "weights changed" in out
+    # 2. partial seeds never count
+    cli("eval", "pz", "--suite", "ood", "--seeds", "1", "--episodes", "0-3", cwd=stack)
+    board = cli("board", cwd=stack).stdout
+    assert "12/12" in board and "1 seeds, 1 partial" in board, board
+    # 3. a corrupt (truncated) results line is skipped, not fatal
+    with open(stack / "runs" / "pz" / "ood" / "s0" / "results.jsonl", "a") as f:
+        f.write('{"episode": 99, "metr')
+    cli("board", cwd=stack)
+    cli("status", cwd=stack)
+    # 4. worker init failure aborts quickly instead of respawning forever
+    good = (stack / "env" / "adapter.py").read_text()
+    (stack / "env" / "adapter.py").write_text(good.replace("def load_policy(tensors, ctx):",
+                                                          "def load_policy(tensors, ctx):\n    raise RuntimeError('boom')"))
+    r = cli("eval", "pz", "--suite", "id", "--seeds", "0", "--jobs", "2", cwd=stack, check=False)
+    assert r.returncode != 0 and "aborting" in (r.stdout + r.stderr) and (r.stdout + r.stderr).count("boom") < 50
+    (stack / "env" / "adapter.py").write_text(good)
+    # 5. detach + wait waits for THIS job (no race with an older DONE)
+    cli("eval", "pz", "--suite", "id", "--seeds", "0,1", "--detach", cwd=stack)
+    out = cli("wait", "pz", "--suite", "id", cwd=stack).stdout
+    assert out.count("full_suite") == 2, out
+    # 6. a second eval of a dir that is being evaluated is refused
+    sys.path.insert(0, str(ROOT / "src"))
+    from editstack.evaluate import lock_dir
+    fd = lock_dir(stack / "runs" / "pz" / "id" / "s0")
+    r = cli("eval", "pz", "--suite", "id", "--seeds", "0", "--fresh", cwd=stack, check=False)
+    os.close(fd)
+    assert r.returncode != 0 and "already being evaluated" in (r.stdout + r.stderr)
+    # 7. ablation variants work and compare against the full chain
+    cli("edit", "new", "pz2", "--parent", "pz", cwd=stack)
+    (stack / "edits" / "pz2" / "edit.py").write_text("PARENT='pz'\ndef apply(W, ctx):\n    W['head.bias'][0] += 0.0\n    W['head.bias'][1] += 0.001\n")
+    out = cli("ablate", "pz2", "--suite", "screen", "--seeds", "0", cwd=stack).stdout
+    assert "pz2~minus~pz" in out and "pz2~minus~pz2" in out
+    # 8. original weights are protected: a changed file is caught on the next eval
+    w = stack / "weights" / "original" / "config.json"
+    os.chmod(w, 0o644)
+    w.write_text(w.read_text() + " ")
+    r = cli("eval", "pz", "--suite", "screen", "--seeds", "0", cwd=stack, check=False)
+    assert r.returncode != 0 and "ORIGINAL WEIGHTS CHANGED" in (r.stdout + r.stderr)

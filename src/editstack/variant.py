@@ -56,28 +56,91 @@ def load_edit(stack, name: str):
     return mod
 
 
+ABLATE_SEP = "~minus~"
+
+
+def read_parent(stack, name: str) -> Optional[str]:
+    """PARENT of an edit, read from the source with ast (never executes the edit)."""
+    import ast
+    path = edit_dir(stack, name) / "edit.py"
+    if not path.exists():
+        raise EditError(f"no edit named {name!r} ({path} missing)")
+    try:
+        tree = ast.parse(path.read_text())
+    except SyntaxError as e:
+        raise EditError(f"{path}: syntax error: {e}")
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "PARENT" for t in node.targets):
+            v = node.value
+            if isinstance(v, ast.Constant) and (v.value is None or isinstance(v.value, str)):
+                return v.value
+            raise EditError(f"{path}: PARENT must be a string literal or None")
+    return None
+
+
+def split_ablation(name: str):
+    """'v~minus~link' -> ('v', 'link'): the chain of v without one link (leave-one-out ablation)."""
+    if ABLATE_SEP in name:
+        base, link = name.split(ABLATE_SEP, 1)
+        return base, link
+    return name, None
+
+
 def chain_of(stack, name: str) -> List[str]:
-    """[root ... name] excluding 'original'."""
-    out, seen, cur = [], set(), name
+    """[root ... name] excluding 'original'. For 'v~minus~link' the chain of v with `link` removed."""
+    base, drop = split_ablation(name)
+    out, seen, cur = [], set(), base
     while cur and cur != ORIGINAL:
         if cur in seen:
             raise EditError(f"PARENT cycle at {cur}")
         seen.add(cur)
         out.append(cur)
-        cur = getattr(load_edit(stack, cur), "PARENT", None)
-    return list(reversed(out))
+        cur = read_parent(stack, cur)
+    out = list(reversed(out))
+    if drop is not None:
+        if drop not in out:
+            raise EditError(f"{drop} is not a link of {base} (chain: {out})")
+        out = [v for v in out if v != drop]
+    return out
+
+
+def _env_fingerprint(stack) -> bytes:
+    """Helper modules edits may import (env/*.py except the adapter) + the original weights' recorded hashes."""
+    h = hashlib.sha256()
+    env = stack.root / "env"
+    for f in sorted(env.glob("**/*.py")) if env.exists() else []:
+        if f.name != "adapter.py" and "__pycache__" not in f.parts:
+            h.update(f.relative_to(env).as_posix().encode())
+            h.update(f.read_bytes())
+    ref = stack.model_dir / "ORIGINAL.sha256.json"
+    if ref.exists():
+        h.update(ref.read_bytes())
+    return h.digest()
 
 
 def chain_hash(stack, name: str) -> str:
-    h = hashlib.sha256()
+    """Identity of a variant's weights: every link's edit.py + data/, env helper modules, and the original's hashes.
+    Changing any of these makes old runs of the variant stale."""
+    h = hashlib.sha256(_env_fingerprint(stack))
     for v in chain_of(stack, name):
         d = edit_dir(stack, v)
         h.update(v.encode())
-        for f in sorted([d / "edit.py", *sorted((d / "data").rglob("*"))] if (d / "data").exists() else [d / "edit.py"]):
+        files = [d / "edit.py"] + (sorted((d / "data").rglob("*")) if (d / "data").exists() else [])
+        for f in files:
             if f.is_file():
                 h.update(f.relative_to(d).as_posix().encode())
                 h.update(f.read_bytes())
     return h.hexdigest()[:16]
+
+
+def variant_exists(stack, name: str) -> bool:
+    if name == ORIGINAL:
+        return True
+    try:
+        chain_of(stack, name)
+        return True
+    except EditError:
+        return False
 
 
 # ------------------------------------------------------------------------------------------------ working weights
@@ -198,7 +261,11 @@ def _delta_stats(orig: np.ndarray, new: np.ndarray) -> dict:
     return st
 
 
-def apply_variant(stack, name: str, check_claims: bool = True, ck: Optional[formats.Checkpoint] = None) -> Applied:
+def apply_variant(stack, name: str, check_claims: bool = True, ck: Optional[formats.Checkpoint] = None,
+                  register: bool = False) -> Applied:
+    """Apply the chain in memory. Claims are always checked against other variants' claims (declared AND derived:
+    changing a slice someone else claimed is a conflict even if you didn't claim it); they are only written to
+    model/CLAIMS.json when register=True (eval/export/promote), never by a dry `apply`."""
     ck = ck or stack.checkpoint()
     W = Weights(ck)
     chain = [] if name == ORIGINAL else chain_of(stack, name)
@@ -210,8 +277,10 @@ def apply_variant(stack, name: str, check_claims: bool = True, ck: Optional[form
         mod.apply(W, ctx)
         all_claims += ctx.claims
         notes += ctx.notes
-    if check_claims and all_claims:
-        claims_mod.register(stack, all_claims, chain)
+    if check_claims:
+        claims_mod.check(stack, all_claims, chain, W.work, ck)
+        if register and all_claims:
+            claims_mod.register(stack, all_claims, chain)
     tensors: Dict[str, np.ndarray] = {}
     changed, stats = [], {}
     for n, orig in ck.tensors.items():
@@ -255,12 +324,21 @@ def diff_report(a: Applied) -> str:
 def export(stack, name: str, out_dir: Optional[Path] = None, verify: bool = True) -> Path:
     """Bake a variant into a standalone checkpoint in the original format, then reload it and verify bit-exactness."""
     import shutil
-    a = apply_variant(stack, name)
+    a = apply_variant(stack, name, register=True)
     out = Path(out_dir) if out_dir else stack.variants_dir / name
     tmp = out.with_name(out.name + ".partial")
     if tmp.exists():
         shutil.rmtree(tmp)
+    need = sum(p.stat().st_size for p in a.ck.weight_files + a.ck.extra_files)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    free = shutil.disk_usage(out.parent).free
+    if free < 1.2 * need + (1 << 30):
+        raise EditError(f"not enough disk to export {name}: need ~{need / 2**30:.1f} GB (+1 GB margin), free {free / 2**30:.1f} GB")
     formats.save(a.ck, a.tensors, tmp)
+    sums = tmp / "SHA256SUMS"
+    if sums.exists():   # the original's checksum file would describe the ORIGINAL weights: regenerate it
+        sums.write_text("".join(f"{formats.sha256_file(p)}  {p.name}\n" for p in sorted(tmp.iterdir())
+                                if p.is_file() and p.name != "SHA256SUMS"))
     if verify:
         back = formats.load(tmp, a.ck.fmt)
         bad = [n for n in a.tensors

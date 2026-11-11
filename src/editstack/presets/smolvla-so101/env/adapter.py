@@ -108,8 +108,9 @@ def run_episode(pol, episode, seed, ctx):
     cid, hid, jid = d.model.body("cube").id, d.model.body("arm/hand").id, d.model.body("arm/jaw").id
     acts, states, geo = [], [], []
     max_lift, best_hold, hold, clipped = 0.0, 0, 0, 0
-    save_obs = os.environ.get("EDITSTACK_SAVE_OBS") == "1"
-    if ctx.out_dir and save_obs:
+    # observations at every chunk boundary (every 50 steps) feed offline probes; EDITSTACK_SAVE_OBS=0 disables
+    save_obs = bool(ctx.out_dir) and os.environ.get("EDITSTACK_SAVE_OBS", "1") != "0"
+    if save_obs:
         Path(ctx.out_dir).mkdir(parents=True, exist_ok=True)
     t0 = time.time()
     for step in range(int(SECONDS * E.FPS)):
@@ -140,9 +141,59 @@ def run_episode(pol, episode, seed, ctx):
         states.append(obs["observation.state"])
     acts, geo = np.array(acts), np.array(geo)
     reach, pick, oc, extra = classify(acts, geo, max_lift)
+    extra["max_lift_m"] = float(max_lift)
     if ctx.out_dir:
         Path(ctx.out_dir).mkdir(parents=True, exist_ok=True)
         np.savez_compressed(Path(ctx.out_dir) / "traj.npz", actions=acts, states=np.array(states), geo=geo)
     jit = np.abs(np.diff(acts, 2, axis=0)).mean(0)
     return {"metrics": {"reach": reach, "pick": pick}, "outcome": oc, "held_1s": best_hold >= E.FPS,
             "jitter": [round(float(x), 3) for x in jit], "clipped": clipped, "secs": round(time.time() - t0, 1), **extra}
+
+
+def rescore(result, ep_dir, ctx):
+    """Re-classify an episode from its stored trajectory (after the REACH/PICK definition changes: bump
+    metric_version in stack.json, edit classify(), then `editstack rescore`)."""
+    z = np.load(Path(ep_dir) / "traj.npz")
+    max_lift = result.get("max_lift_m", result.get("max_lift_cm", 0) / 100)
+    reach, pick, oc, extra = classify(z["actions"], z["geo"], max_lift)
+    result.update(extra)
+    result["metrics"] = {"reach": reach, "pick": pick}
+    result["outcome"] = oc
+    return result
+
+
+def load_obs(path):
+    """A saved chunk-boundary observation (runs/<v>/<suite>/s<k>/ep<i>/obs_<step>.npz) as a policy observation dict."""
+    z = np.load(path)
+    return {("observation." + k): z[k] for k in z.files}
+
+
+def capture(pol, obs, names, task=None):
+    """Run ONE action-chunk prediction on a recorded observation and return {module_name: output activation} for
+    the named modules (e.g. "model.vlm_with_expert.lm_expert.layers.15.mlp"), plus "actions" (the FIRST action of
+    the predicted chunk; the hooks see the whole chunk computation, stacked over the 10 denoising steps).
+    Inputs to a module: prefix the name with "in:". This is the offline probe primitive (seconds, no sim)."""
+    m = pol.m
+    torch = m.torch
+    acts, hooks = {}, []
+
+    def hook(key, want_input):
+        def f(mod, inp, out):
+            t = inp[0] if want_input else (out[0] if isinstance(out, tuple) else out)
+            acts.setdefault(key, []).append(t.detach().float().cpu().numpy())
+        return f
+
+    for n in names:
+        want_input = n.startswith("in:")
+        mod = pol.policy.get_submodule(n[3:] if want_input else n)
+        hooks.append(mod.register_forward_hook(hook(n, want_input)))
+    try:
+        pol.policy.reset(); pol.pre.reset(); pol.post.reset()
+        a = m.predict_action(dict(obs), pol.policy, pol.device, pol.pre, pol.post, use_amp=False,
+                             task=task or m.E.TASK, robot_type="so101_follower")
+    finally:
+        for h in hooks:
+            h.remove()
+    out = {k: (v[0] if len(v) == 1 else np.stack(v)) for k, v in acts.items()}   # stacked over the 10 denoising steps
+    out["actions"] = a.squeeze(0).cpu().numpy()
+    return out

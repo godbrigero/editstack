@@ -40,46 +40,56 @@ def sign_test(wins: int, losses: int) -> float:
 
 
 def collect(stack) -> Dict[str, Dict[str, dict]]:
-    """variant -> suite -> {"rows": {(seed, ep): result}, "seeds": set, "stale": n_dirs_ignored}"""
+    """variant -> suite -> {"rows": {(seed, ep): result} from COMPLETE seeds only, "seeds": set, "partial": n,
+    "stale": n}. A seed counts only when its DONE marker says it covered the whole suite; partial seeds and
+    stale dirs (different weights, harness, adapter, suite or metric version) are shown but never counted."""
     from .variant import ORIGINAL, chain_hash, EditError
+    from .evaluate import suite_episodes, suite_hash, adapter_hash
     out: Dict[str, Dict[str, dict]] = defaultdict(dict)
     current = {}
     if not stack.runs_dir.exists():
         return out
-    from .evaluate import suite_episodes, suite_hash
     shash = {}
     for name, s in stack.suites().items():
         try:
             shash[name] = suite_hash(suite_episodes(stack, s))
         except Exception:
             shash[name] = None
+    ah, mv = adapter_hash(stack), str(stack.cfg.get("metric_version", "1"))
     for meta_f in sorted(stack.runs_dir.glob("*/*/s*/meta.json")):
         d = meta_f.parent
         variant, suite = d.parent.parent.name, d.parent.name
         if variant.startswith("_"):
             continue
-        m = json.loads(meta_f.read_text())
+        try:
+            m = json.loads(meta_f.read_text())
+        except ValueError:
+            continue
         if variant not in current:
             try:
                 current[variant] = "original" if variant == ORIGINAL else chain_hash(stack, variant)
             except (EditError, OSError):
                 current[variant] = None
-        slot = out[variant].setdefault(suite, {"rows": {}, "seeds": set(), "stale": 0,
+        slot = out[variant].setdefault(suite, {"rows": {}, "seeds": set(), "stale": 0, "partial": 0,
                                                 "role": m.get("suite_role", "selection")})
         if (m.get("harness_version") != stack.harness_version or m.get("chain_hash") != current[variant]
-                or m.get("suite_hash") != shash.get(suite)):
+                or m.get("suite_hash") != shash.get(suite) or m.get("adapter_hash") != ah
+                or m.get("metric_version", "1") != mv):
             slot["stale"] += 1
             continue
         rows = done_episodes(d)
-        if rows:
-            slot["seeds"].add(int(m["seed"]))
-            for ep, r in rows.items():
-                slot["rows"][(int(m["seed"]), ep)] = r
+        size = m.get("suite_size") or 0
+        if not (d / "DONE").exists() or len(rows) < size:
+            slot["partial"] += 1
+            continue
+        slot["seeds"].add(int(m["seed"]))
+        for ep, r in rows.items():
+            slot["rows"][(int(m["seed"]), ep)] = r
     return out
 
 
 def summarize(stack, data=None) -> List[dict]:
-    from .variant import ORIGINAL, load_edit, EditError
+    from .variant import ORIGINAL, read_parent, split_ablation, EditError
     data = data if data is not None else collect(stack)
     cfg = stack.cfg
     metrics = cfg["metrics"]["all"]
@@ -92,7 +102,8 @@ def summarize(stack, data=None) -> List[dict]:
         for sname, s in suites.items():
             rs = list(s["rows"].values())
             n = len(rs)
-            row["suites"][sname] = {"n": n, "seeds": len(s["seeds"]), "stale": s["stale"], "role": roles.get(sname, s["role"]),
+            row["suites"][sname] = {"n": n, "seeds": len(s["seeds"]), "stale": s["stale"], "partial": s.get("partial", 0),
+                                    "role": roles.get(sname, s["role"]),
                                     **{m: sum(bool(r["metrics"].get(m)) for r in rs) for m in metrics}}
         for rule in q["rules"]:
             s = row["suites"].get(rule["suite"], {"n": 0, "seeds": 0})
@@ -115,7 +126,9 @@ def summarize(stack, data=None) -> List[dict]:
         parent = None
         if variant != ORIGINAL:
             try:
-                parent = getattr(load_edit(stack, variant), "PARENT", None) or ORIGINAL
+                parent = read_parent(stack, split_ablation(variant)[0]) or ORIGINAL
+                if split_ablation(variant)[1]:
+                    parent = split_ablation(variant)[0]          # ablations are compared against the full chain
             except (EditError, OSError):
                 parent = None
         row["parent"] = parent
@@ -130,8 +143,8 @@ def summarize(stack, data=None) -> List[dict]:
                 l = sum(not bool(s["rows"][k]["metrics"].get(primary)) and bool(ps["rows"][k]["metrics"].get(primary)) for k in shared)
                 if shared:
                     row["vs_parent"][sname] = {"pairs": len(shared), "wins": w, "losses": l, "p": sign_test(w, l)}
-        hold = [sn for sn, s in row["suites"].items() if s["role"] == "heldout" and s["n"]]
-        row["heldout_done"] = bool(hold)
+        hold = [sn for sn, s in row["suites"].items() if s["role"] == "heldout" and s["seeds"] >= 1]
+        row["heldout_done"] = bool(hold)          # >= 1 COMPLETE seed of a held-out suite
         board.append(row)
     board.sort(key=lambda r: (r["qualified"], r["key"]), reverse=True)
     return board
@@ -151,13 +164,15 @@ def render(stack, board: List[dict]) -> str:
         for s in suites:
             x = r["suites"].get(s)
             if not x or not x["n"]:
-                cells.append("-" + (f" ({x['stale']} stale)" if x and x["stale"] else ""))
+                notes = [f"{x[k]} {k}" for k in ("stale", "partial") if x and x.get(k)]
+                cells.append("-" + (f" ({', '.join(notes)})" if notes else ""))
                 continue
             parts = []
             for m in metrics:
                 lo, hi = wilson(x[m], x["n"])
                 parts.append(f"{m} {x[m]}/{x['n']} [{lo:.0%}-{hi:.0%}]")
-            cells.append("<br>".join(parts) + f"<br>{x['seeds']} seeds")
+            notes = "".join(f", {x[k]} {k}" for k in ("partial", "stale") if x.get(k))
+            cells.append("<br>".join(parts) + f"<br>{x['seeds']} seeds{notes}")
         vp = "; ".join(f"{s}: +{v['wins']}/-{v['losses']} p={v['p'] if v['p'] >= 0.001 else '<0.001'}"
                        for s, v in r["vs_parent"].items())
         q = "yes" if r["qualified"] else "no: " + ", ".join(r["why"][:3])
@@ -191,15 +206,33 @@ def promote(stack, dry_run: bool = False, force: bool = False, variant: Optional
         if held and not force:
             return (f"{name} leads but has no held-out results. Run: editstack eval {name} --suite {held[0]} "
                     f"--seeds 0 ; then promote again (or --force).")
+    max_gap = float(stack.cfg["qualify"].get("max_heldout_gap", 0.15))
     for sname, s in win["suites"].items():
         if s["role"] == "heldout" and s["n"]:
-            sel = [x for x in win["suites"].values() if x["role"] == "selection" and x["n"]]
+            # compare with the OOD-like selection suite(s) named in the ranking (the ones held-out mirrors)
+            rank_suites = [sn for sn, _ in stack.cfg["qualify"]["rank"]]
+            sel = [x for sn, x in win["suites"].items() if x["role"] == "selection" and x["n"] and sn in rank_suites[:1]]
             p = stack.cfg["metrics"]["primary"]
             if sel:
                 sel_rate = sum(x[p] for x in sel) / sum(x["n"] for x in sel)
                 gap = sel_rate - s[p] / s["n"]
-                if gap > 0.15:
-                    msgs.append(f"WARNING: {name} held-out {p} is {gap:.0%} below its selection suites (overfit?)")
+                if gap > max_gap and not force:
+                    return (f"{name} held-out {p} {s[p]}/{s['n']} is {gap:.0%} below its selection rate ({sel_rate:.0%}) "
+                            f"> max_heldout_gap {max_gap:.0%}: likely overfit to the selection placements. Not promoted "
+                            f"(--force to override, and say why in board/BEST_HISTORY.md).")
+                if gap > max_gap:
+                    msgs.append(f"FORCED despite held-out gap {gap:.0%}")
+    abl = [r for r in board if r["variant"].startswith(name + "~minus~")]
+    from .variant import chain_of
+    links = chain_of(stack, name) if name != ORIGINAL else []
+    if len(links) > 1:
+        tested = {r["variant"].split("~minus~", 1)[1]: r for r in abl}
+        dead = [l for l, r in tested.items() if not any(v["wins"] < v["losses"] for v in r["vs_parent"].values())]
+        missing = [l for l in links if l not in tested]
+        if missing:
+            msgs.append(f"note: no leave-one-out ablation for links {missing} (editstack ablate {name} --suite <s>)")
+        if dead:
+            msgs.append(f"note: removing {dead} did not hurt on any suite - consider dropping them (simpler chain)")
     current = os.readlink(stack.best_link) if stack.best_link.is_symlink() else None
     target = stack.variants_dir / name
     if dry_run:
@@ -226,5 +259,15 @@ def promote(stack, dry_run: bool = False, force: bool = False, variant: Optional
         if f.tell() == 0:
             f.write("# weights/best history\n\n")
         f.write(f"- {time.strftime('%Y-%m-%d %H:%M')}: **{name}** (harness {stack.harness_version}) {cells} (was: {current})\n")
+    for link in stack.cfg.get("deploy_links", []):            # e.g. a robot launcher's "best-thus-far" symlink
+        lp = Path(os.path.expanduser(link))
+        if lp.is_symlink() or not lp.exists():
+            if lp.is_symlink():
+                lp.unlink()
+            lp.parent.mkdir(parents=True, exist_ok=True)
+            lp.symlink_to(target.resolve())
+            msgs.append(f"deploy link {lp} -> {target.resolve()}")
+        else:
+            msgs.append(f"WARNING: deploy link {lp} exists and is not a symlink; left untouched")
     write(stack)
     return "\n".join(msgs + [f"weights/best -> {name}"])

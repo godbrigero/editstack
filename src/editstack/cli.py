@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 # commands that load the model / sim and must run under the stack's python (stack.json "python")
-RUNTIME_CMDS = {"eval", "export", "promote", "apply", "decode", "verify", "run"}
+RUNTIME_CMDS = {"eval", "export", "promote", "apply", "decode", "verify", "run", "rescore", "ablate"}
 
 
 def _stack():
@@ -99,10 +99,21 @@ def main(argv=None) -> None:
     a.add_argument("--detach", action="store_true", help="run in a new session; prints the log path; use `editstack wait`")
     a.add_argument("--note", default="")
 
-    a = sub.add_parser("wait", help="block until evals of a variant (and suite) have DONE markers; print summary")
+    a = sub.add_parser("wait", help="block until the latest detached eval of a variant (and suite) exits; print per-seed results")
     a.add_argument("variant")
     a.add_argument("--suite")
+    a.add_argument("--seeds", help="only report these seeds")
     a.add_argument("--timeout", type=float, default=7200)
+
+    a = sub.add_parser("rescore", help="recompute metrics from stored artifacts after a metric_version change (no sim)")
+    a.add_argument("variant", nargs="?")
+
+    a = sub.add_parser("ablate", help="leave-one-out: evaluate the chain of <variant> minus each link (before promoting)")
+    a.add_argument("variant")
+    a.add_argument("--suite", required=True)
+    a.add_argument("--seeds", default="0")
+    a.add_argument("--jobs", type=int, default=1)
+    a.add_argument("--detach", action="store_true")
 
     sub.add_parser("board", help="print and write board/LEADERBOARD.md")
     a = sub.add_parser("promote", help="point weights/best at the top qualified variant (exports if needed)")
@@ -181,12 +192,9 @@ def _dispatch(args, argv) -> None:
             if v:
                 print(f"  {k}: {len(v)} hint(s)" + (f"  e.g. {v[0][:150]}" if k in ("slices", "nonfinite", "uniform_like") else ""))
     elif cmd == "verify":
-        from .formats import sha256_file
-        ref = json.loads((st.model_dir / "ORIGINAL.sha256.json").read_text())
-        bad = [n for n, h in ref.items() if sha256_file(st.original_dir / n) != h]
-        print("original weights intact" if not bad else f"ORIGINAL WEIGHTS CHANGED: {bad}")
-        if bad:
-            raise SystemExit(1)
+        from .decode import verify
+        files = verify(st, full=True)
+        print(f"original weights intact ({len(files)} files, full sha256)")
     elif cmd == "edit":
         from .variant import chain_of
         if args.sub == "new":
@@ -207,16 +215,43 @@ def _dispatch(args, argv) -> None:
         print(f"exported and verified: {out}")
     elif cmd == "eval":
         from .evaluate import evaluate, detach
+        seeds = [int(x) for x in args.seeds.split(",") if x != ""]
         if args.detach:
-            log = detach(st, argv)
-            print(f"detached. log: {log}\nwait with: editstack wait {args.variant} --suite {args.suite}")
+            job = detach(st, argv, args.variant, args.suite, seeds)
+            print(f"detached job {job['id']} (pid {job['pid']}). log: {job['log']}\n"
+                  f"wait with: editstack wait {args.variant} --suite {args.suite}")
             return
-        seeds = [int(s) for s in args.seeds.split(",") if s != ""]
         evaluate(st, args.variant, args.suite, seeds, args.episodes, args.jobs, args.device, args.fresh, args.note)
         from .board import write
         write(st)
     elif cmd == "wait":
-        _wait(st, args.variant, args.suite, args.timeout)
+        from .evaluate import wait
+        seeds = [int(x) for x in args.seeds.split(",")] if args.seeds else None
+        out = wait(st, args.variant, args.suite, seeds, args.timeout)
+        print("\n".join(out))
+        if any("NOT COMPLETE" in l for l in out):
+            raise SystemExit(1)
+    elif cmd == "rescore":
+        from .evaluate import rescore
+        print("\n".join(rescore(st, args.variant)))
+    elif cmd == "ablate":
+        from .variant import chain_of, ABLATE_SEP
+        from .evaluate import evaluate, detach
+        links = chain_of(st, args.variant)
+        if len(links) < 2:
+            raise SystemExit(f"{args.variant} has a single link; nothing to ablate")
+        seeds = [int(x) for x in args.seeds.split(",") if x != ""]
+        for link in links:
+            v = f"{args.variant}{ABLATE_SEP}{link}"
+            if args.detach:
+                job = detach(st, ["eval", v, "--suite", args.suite, "--seeds", args.seeds, "--jobs", str(args.jobs)],
+                             v, args.suite, seeds)
+                print(f"detached {v}: job {job['id']}")
+            else:
+                evaluate(st, v, args.suite, seeds, None, args.jobs)
+        if not args.detach:
+            from .board import write
+            print(write(st))
     elif cmd == "board":
         from .board import write
         print(write(st))
@@ -255,21 +290,17 @@ def _dispatch(args, argv) -> None:
 
 
 def _running(st):
+    from .evaluate import is_locked, done_episodes
     out = []
     for m in st.runs_dir.glob("*/*/s*/meta.json"):
-        if m.parent.parent.parent.name.startswith("_") or (m.parent / "DONE").exists():
+        d = m.parent
+        if d.parent.parent.name.startswith("_") or (d / "DONE").exists():
             continue
-        meta = json.loads(m.read_text())
-        pid = meta.get("pid")
-        alive = False
-        if pid:
-            try:
-                os.kill(pid, 0)
-                alive = True
-            except OSError:
-                pass
-        n = sum(1 for _ in open(m.parent / "results.jsonl")) if (m.parent / "results.jsonl").exists() else 0
-        out.append((m.parent.relative_to(st.root), n, len(meta["episodes_planned"]), alive))
+        try:
+            meta = json.loads(m.read_text())
+        except ValueError:
+            continue
+        out.append((d.relative_to(st.root), len(done_episodes(d)), len(meta.get("episodes_planned", [])), is_locked(d)))
     return out
 
 
@@ -281,7 +312,7 @@ def _status(st) -> None:
     run = _running(st)
     print(f"\nunfinished eval dirs: {len(run)}")
     for d, n, tot, alive in run:
-        print(f"  {d}  {n}/{tot}  {'running' if alive else 'NOT RUNNING (dead/interrupted: rerun same command to resume)'}")
+        print(f"  {d}  {n}/{tot}  {'running' if alive else 'NOT RUNNING (interrupted: rerun the same eval command to resume)'}")
     print("\nRAM slots:\n" + "\n".join("  " + l for l in slot_status(st).splitlines()))
     b = summarize(st)
     print("\nleaderboard top 5 (editstack board for all):")
@@ -290,23 +321,6 @@ def _status(st) -> None:
         cells = ", ".join(f"{s} {x[p]}/{x['n']}" for s, x in r["suites"].items() if x["n"])
         print(f"  {'Q' if r['qualified'] else ' '} {r['variant']:20s} {cells}")
     print(f"\nweights/best -> {os.readlink(st.best_link) if st.best_link.is_symlink() else '(none)'}")
-
-
-def _wait(st, variant, suite, timeout) -> None:
-    t0 = time.time()
-    pat = f"{variant}/{suite or '*'}/s*"
-    while True:
-        dirs = [d for d in st.runs_dir.glob(pat) if (d / "meta.json").exists()]
-        if dirs and all((d / "DONE").exists() for d in dirs):
-            for d in sorted(dirs):
-                print(f"{d.relative_to(st.root)}: {(d / 'DONE').read_text().strip()}")
-            return
-        alive = [x for x in _running(st) if str(x[0]).startswith(f"runs/{variant}/") and x[3]]
-        if dirs and not alive and time.time() - t0 > 60:
-            raise SystemExit(f"no live process is producing {pat} and not all DONE - rerun the eval command to resume")
-        if time.time() - t0 > timeout:
-            raise SystemExit(f"timeout after {timeout:.0f}s waiting for {pat}")
-        time.sleep(10)
 
 
 if __name__ == "__main__":
