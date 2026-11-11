@@ -123,7 +123,7 @@ def sync(stack, dry_run: bool = False) -> List[str]:
             continue
         locally_edited = installed.get(rel) is not None and installed[rel] != _h(loc)
         unknown = rel not in installed
-        if (locally_edited or unknown) and rel.startswith("docs/strategies/S"):
+        if rel.startswith("docs/strategies/S"):           # evidence logs are never lost, whatever the hashes say
             merged = merge_strategy(up.read_text(), loc.read_text())
             if merged is not None:
                 report.append(f"merged   {rel} (upstream text + this stack's evidence-log lines)")
