@@ -1,0 +1,9 @@
+# weights and run artifacts are large; knowledge, edits, suites and the board are tracked
+weights/original/*
+weights/variants/
+weights/best
+runs/
+agents/*/data/
+**/__pycache__/
+*.pyc
+.DS_Store

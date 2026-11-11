@@ -1,0 +1,7 @@
+{
+  "name": "ood",
+  "role": "selection",
+  "description": "The generalisation target.",
+  "default_seeds": [0],
+  "episodes": []
+}

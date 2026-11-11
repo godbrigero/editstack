@@ -1,0 +1,7 @@
+{
+  "name": "id",
+  "role": "selection",
+  "description": "In-distribution: what the model already does. Guards against regressions.",
+  "default_seeds": [0],
+  "episodes": []
+}

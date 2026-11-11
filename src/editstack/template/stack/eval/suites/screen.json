@@ -1,0 +1,7 @@
+{
+  "name": "screen",
+  "role": "screen",
+  "description": "Fast smoke screen (8-12 episodes, mix of id and ood). Never used to promote.",
+  "default_seeds": [0],
+  "episodes": []
+}

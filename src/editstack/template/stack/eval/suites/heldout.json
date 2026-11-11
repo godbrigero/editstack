@@ -1,0 +1,7 @@
+{
+  "name": "heldout",
+  "role": "heldout",
+  "description": "Never used for choosing variants. Run once per promotion candidate.",
+  "default_seeds": [0],
+  "episodes": []
+}

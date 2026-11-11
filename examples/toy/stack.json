@@ -1,0 +1,4 @@
+{"resources": {"per_process_gb": 1},
+ "qualify": {"rules": [{"suite": "ood", "min_seeds": 3, "min_episodes": 30},
+                       {"suite": "id", "min_seeds": 2, "min_episodes": 30, "min_rate": {"success": 0.5}}],
+             "rank": [["ood", "success"], ["id", "success"]], "require_heldout": true}}
